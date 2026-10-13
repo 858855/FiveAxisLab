@@ -1,12 +1,14 @@
-# FiveAxisLab 0.2.0
+# FiveAxisLab 0.3.0
 
 Independent C++17 / Qt 6 / OpenGL research application for five-axis FFF. Windows x64 portable build, shared headless core, AGPL-3.0-or-later. This is an initial research implementation, with remaining qualification work recorded in [docs/VALIDATION.md](docs/VALIDATION.md).
 
 ## Run
 
-Extract the locally packaged `dist/FiveAxisLab-0.2.0-win64.zip` and run `FiveAxisLab.exe`. No SDK or Python is needed to run the packaged desktop app. The portable folder also contains `fiveaxis_cli.exe`, example projects, CAD fixtures, controller integration, dependency notices and validation reports. Binary packages and the SDK are excluded from Git; a fresh clone can produce them using the build instructions below.
+Extract the locally packaged `dist/FiveAxisLab-0.3.0-win64.zip` and run `FiveAxisLab.exe`. No SDK or Python is needed to run the packaged desktop app. The portable folder also contains `fiveaxis_cli.exe`, example projects, CAD fixtures, controller integration, dependency notices and validation reports. Binary packages and the SDK are excluded from Git; a fresh clone can produce them using the build instructions below.
 
-![Windows simulation with toolpaths](examples/reports/toolpaths-preview.png)
+![Windows simulation with toolpaths](examples/reports/workspace-preview.png)
+
+Version 0.3 adds the Orca-style **Prepare / Preview** workspace, an inline **Quality / Strength / Speed / Support / Other** sidebar, settings search, a screenshot-reference preset, filament/time/cost estimates, layer-range sliders and bead/path visibility by line type. New settings generate real surface patterns, shell thicknesses, alternating walls, compensation, speed limits, skirts and brims. STEP import has live linear/angular tessellation controls and a component/facet preview. [Implemented and unavailable controls](docs/WORKSPACE.md) lists the exact boundary; scarf, tree support, ironing, multi-material and full Orca engine integration remain outstanding.
 
 Version 0.2 adds **Toolpaths → Full job / Up to nozzle / Current layer**, travel and deposited-material visibility controls, and role colors for outer walls, inner walls, infill, solid fill and supports. **Generate with dummy toolhead** uses synthetic collision geometry while retaining the imported STEP assembly. **Process settings · Orca options** exposes widths, wall order, shell layers, infill patterns, seam placement, speeds and Z hop. Select **Normal / Reduced / No supports**; unsupported deposition remains checked. [Supported controls and Orca preset import](docs/PROCESS_SETTINGS.md).
 

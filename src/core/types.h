@@ -19,7 +19,8 @@ constexpr double pi = 3.14159265358979323846;
 enum class Layout { RotaryBed, TiltingHead };
 enum class Controller { Duet, Klipper };
 enum class Link { Carriage, RotaryStage, Nozzle };
-enum class Role { Travel, Wall, Infill, Support, Retract, OuterWall, SolidInfill };
+enum class Role { Travel, Wall, Infill, Support, Retract, OuterWall, SolidInfill, TopSurface, BottomSurface, Brim, Skirt, Bridge };
+enum class SurfacePattern { Rectilinear, Monotonic, Concentric };
 enum class InfillPattern { StressAligned, Rectilinear, Grid };
 enum class SeamPosition { LowStress, Aligned, Back, Nearest, Random };
 enum class SupportMode { Normal, Reduced, None };
@@ -157,6 +158,18 @@ struct ProcessSettings {
     double supportSpeed = 0, firstLayerSpeed = 0, travelSpeed = 100, travelLift = 3;
     SupportMode supportMode = SupportMode::Normal;
     double supportSpacing = 0, supportReduction = 2;
+    double topWidth = 0, supportWidth = 0;
+    double resolution = .012, contourCompensation = 0, holeCompensation = 0, elephantFoot = 0;
+    bool preciseZ = false, infillFirst = false, alternateExtraWall = false;
+    double topThickness = 0, bottomThickness = 0, topDensity = 1, bottomDensity = 1;
+    SurfacePattern topPattern = SurfacePattern::Monotonic, bottomPattern = SurfacePattern::Monotonic;
+    double firstLayerInfillSpeed = 0, topSpeed = 0, smallWallSpeed = .5, smallWallThreshold = 0, smallWallAbsoluteSpeed = 0;
+    bool slowOverhangs = false;
+    std::array<double,5> overhangSpeeds = {0,50,15,10,10};
+    double supportAngle = 0;
+    bool supportBedOnly = false, removeSmallOverhangs = false;
+    int skirtLoops = 0, skirtHeight = 1, brimType = 0;
+    double skirtDistance = 5, brimWidth = 5, brimGap = .1;
 };
 struct DepositionReport {
     bool checked = false;
@@ -186,6 +199,8 @@ struct Project {
     std::vector<Fixture> fixtures;
     std::vector<Sample> path;
     QString pathProcessFingerprint;
+    QString filamentName = "Generic PLA";
+    double filamentDensity = 1.24, filamentCost = 25;
     CollisionReport report;
     QStringList diagnostics;
     bool depositionValid = false;
@@ -230,6 +245,7 @@ void time_path(Project &p);
 SimulationState simulation_at(const Project &p, double time, bool rebuildDeposition = true);
 Project demo_project();
 QString role_name(Role r);
+constexpr int role_count = 12;
 QJsonObject project_json(const Project &p);
 Project project_from_json(const QJsonObject &json);
 } // namespace fiveaxis

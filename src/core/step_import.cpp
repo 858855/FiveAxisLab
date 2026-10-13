@@ -4,6 +4,8 @@
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <BRep_Tool.hxx>
+#include <BRep_Builder.hxx>
+#include <TopoDS_Compound.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <Interface_Static.hxx>
 #include <Poly_Triangulation.hxx>
@@ -29,6 +31,10 @@
 namespace fiveaxis {
 static std::mutex stepMutex;
 ToolheadAssembly load_step_assembly(const QString &filename, double deflection, std::atomic_bool *cancel) {
+    StepImportOptions options; options.linearDeflection=deflection;
+    return load_step_assembly(filename,options,cancel);
+}
+ToolheadAssembly load_step_assembly(const QString &filename, const StepImportOptions &options, std::atomic_bool *cancel) {
     std::lock_guard<std::mutex> lock(stepMutex);
     QFile input(filename);
     if (!input.open(QIODevice::ReadOnly))
@@ -38,11 +44,15 @@ ToolheadAssembly load_step_assembly(const QString &filename, double deflection, 
     out.sourceStep = input.readAll();
     out.sourceHash =
         QString::fromLatin1(QCryptographicHash::hash(out.sourceStep, QCryptographicHash::Sha256).toHex());
-    if (deflection <= 0 || !std::isfinite(deflection))
+    double deflection=options.linearDeflection;
+    if (deflection <= 0 || !std::isfinite(deflection) || !std::isfinite(options.angularDeflection) ||
+        options.angularDeflection<=0 || options.angularDeflection>pi || !std::isfinite(options.renderDeflection) || options.renderDeflection<=0)
         throw std::runtime_error("Invalid STEP tessellation tolerance");
     QString cacheRoot = QCoreApplication::applicationDirPath() + "/cache/step";
     QString cached =
-        cacheRoot + "/" + out.sourceHash + "-" + QString::number(deflection, 'g', 12) + "-v2.5axis";
+        cacheRoot + "/" + out.sourceHash + "-" + QString::number(deflection, 'g', 12) + "-"+
+        QString::number(options.angularDeflection,'g',12)+"-"+QString::number(options.renderDeflection,'g',12)+
+        (options.splitCompounds?"-split":"-whole")+"-v3.5axis";
     if (QFile::exists(cached))
         try {
             auto stored = load_project(cached);
@@ -98,9 +108,15 @@ ToolheadAssembly load_step_assembly(const QString &filename, double deflection, 
                 return;
             }
             TopoDS_Shape shape = shapes->GetShape(definition);
+            std::vector<TopoDS_Shape> pieces;
+            if(options.splitCompounds && (shape.ShapeType()==TopAbs_COMPOUND || shape.ShapeType()==TopAbs_COMPSOLID))
+                for(TopExp_Explorer ex(shape,TopAbs_SOLID);ex.More();ex.Next()) pieces.push_back(ex.Current());
+            if(pieces.empty()) pieces.push_back(shape);
+            for(size_t piece=0;piece<pieces.size();++piece) {
+            auto part=pieces[piece];
             Component comp;
-            comp.id = id;
-            comp.name = name;
+            comp.id = id+(pieces.size()>1?"/solid/"+QString::number(piece):QString{});
+            comp.name = name+(pieces.size()>1?" · solid "+QString::number(piece+1):QString{});
             comp.mesh.name = name;
             comp.mesh.error = deflection;
             comp.nozzle = name.contains("nozzle", Qt::CaseInsensitive);
@@ -108,13 +124,13 @@ ToolheadAssembly load_step_assembly(const QString &filename, double deflection, 
                 for (int j = 0; j < 4; ++j)
                     comp.assemblyPlacement.matrix()(i, j) = placement.Transformation().Value(i + 1, j + 1);
             auto tessellate = [&](double tolerance) {
-                BRepMesh_IncrementalMesh mesher(shape, tolerance, false, 0.0872664626, true);
+                BRepMesh_IncrementalMesh mesher(part, tolerance, false, options.angularDeflection, true);
                 if (!mesher.IsDone())
                     throw std::runtime_error("STEP tessellation failed");
                 Mesh mesh;
                 mesh.name = name;
                 mesh.error = tolerance;
-                for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next()) {
+                for (TopExp_Explorer ex(part, TopAbs_FACE); ex.More(); ex.Next()) {
                     TopLoc_Location loc;
                     auto face = TopoDS::Face(ex.Current());
                     auto tri = BRep_Tool::Triangulation(face, loc);
@@ -136,10 +152,11 @@ ToolheadAssembly load_step_assembly(const QString &filename, double deflection, 
                 }
                 return mesh;
             };
-            comp.renderMesh = tessellate(std::max(.1, deflection));
+            comp.renderMesh = tessellate(std::max(options.renderDeflection, deflection));
             comp.mesh = tessellate(deflection);
             if (!comp.mesh.empty())
                 out.components.push_back(std::move(comp));
+            }
         };
     for (int i = 1; i <= roots.Length(); ++i)
         visit(roots.Value(i), TopLoc_Location{}, "root", 0);
@@ -154,7 +171,7 @@ ToolheadAssembly load_step_assembly(const QString &filename, double deflection, 
         }
     return out;
 }
-void write_demo_step(const QString &filename, bool nested, bool inches) {
+void write_demo_step(const QString &filename, bool nested, bool inches, bool compound) {
     std::lock_guard<std::mutex> lock(stepMutex);
     auto app = XCAFApp_Application::GetApplication();
     Handle(TDocStd_Document) doc;
@@ -171,7 +188,9 @@ void write_demo_step(const QString &filename, bool nested, bool inches) {
     add(BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), 0.4, 2).Shape(), "Nozzle", root);
     add(BRepPrimAPI_MakeBox(gp_Pnt(-5, -4, 8), 10, 8, 8).Shape(), "Heater block", root);
     add(BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(0, 0, 2), gp_Dir(0, 0, 1)), 1, 8).Shape(), "Heat break", root);
-    auto fan = add(BRepPrimAPI_MakeBox(gp_Pnt(7, -6, 12), 8, 12, 12).Shape(), "Fan shroud", root);
+    TopoDS_Shape fanShape=BRepPrimAPI_MakeBox(gp_Pnt(7,-6,12),8,12,12).Shape();
+    if(compound) {TopoDS_Compound solids;BRep_Builder builder;builder.MakeCompound(solids);builder.Add(solids,fanShape);builder.Add(solids,BRepPrimAPI_MakeBox(gp_Pnt(7,8,12),8,3,12).Shape());fanShape=solids;}
+    auto fan = add(fanShape, "Fan shroud", root);
     if (nested) {
         auto sub = st->NewShape();
         TDataStd_Name::Set(sub, "Repeated carriage");

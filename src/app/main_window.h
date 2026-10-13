@@ -1,17 +1,22 @@
 #pragma once
 #include "core/types.h"
 #include "viewport.h"
+#include "process_editor.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QElapsedTimer>
 #include <QFutureWatcher>
 #include <QLabel>
+#include <QLineEdit>
+#include <QPushButton>
 #include <QMainWindow>
 #include <QProgressBar>
 #include <QSlider>
 #include <QTextEdit>
 #include <QTimer>
+#include <QTableWidget>
+#include <QTabBar>
 #include <set>
 struct WorkResult {
     fiveaxis::Project project;
@@ -37,6 +42,17 @@ class MainWindow : public QMainWindow {
     QTextEdit *log;
     QProgressBar *progress;
     QSlider *timeline;
+    ProcessEditor *processEditor;
+    QTabBar *workspaces;
+    QTableWidget *roleStatistics;
+    QTextEdit *movePreview;
+    QLabel *totals, *layerLabel, *partName, *processError;
+    QSlider *lowerLayer,*upperLayer;
+    QLineEdit *filamentName;
+    QDoubleSpinBox *filamentDensity,*filamentCost;
+    QPushButton *sliceButton,*exportButton;
+    bool updatingPreview=false;
+    int lastPreviewMove=-1;
     QTimer timer;
     QElapsedTimer elapsed;
     QFutureWatcher<WorkResult> worker;
@@ -62,4 +78,8 @@ class MainWindow : public QMainWindow {
     void seek(double t);
     void save();
     void show_error(const QString &message);
+    QWidget *create_preview_inspector();
+    void refresh_preview(bool preserveRange=false);
+    void update_move_preview();
+    void set_workspace(int index);
 };

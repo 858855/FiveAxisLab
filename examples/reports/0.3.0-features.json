@@ -1,0 +1,25 @@
+{
+  "version": "0.3.0",
+  "checks": {
+    "coreCases": 41,
+    "desktopWorkflows": 4,
+    "flowCases": 8,
+    "failures": 0
+  },
+  "sCurve": {
+    "moves": 48104,
+    "layers": 166,
+    "seconds": 3441.860811356203,
+    "coverage": 1,
+    "unsupported": 0,
+    "collisionValidated": false,
+    "exportable": false
+  },
+  "reference": {
+    "status": 0,
+    "checkedIntervals": 4670,
+    "controllerSemanticReplayValidated": true
+  },
+  "nativeFirmwareValidated": false,
+  "physicalPrintingValidated": false
+}

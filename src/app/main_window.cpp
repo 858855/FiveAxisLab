@@ -7,6 +7,9 @@
 #include "core/slicing.h"
 #include "core/step_import.h"
 #include "core/stress.h"
+#include "step_dialog.h"
+#include <QFileInfo>
+#include <QStyle>
 #include <QAction>
 #include <QApplication>
 #include <QDialog>
@@ -84,148 +87,108 @@ static Vec3 parse_vector(const QString &text) {
     return p;
 }
 MainWindow::MainWindow() : project(demo_project()) {
-    setWindowTitle("FiveAxisLab — STEP collision and simulation research");
-    resize(1440, 920);
-    auto central = new QWidget;
-    setCentralWidget(central);
-    auto horizontal = new QHBoxLayout(central);
-    horizontal->setContentsMargins(14, 14, 14, 14);
-    horizontal->setSpacing(14);
-    auto scroll = new QScrollArea;
-    scroll->setWidgetResizable(true);
-    scroll->setFixedWidth(305);
-    auto panel = new QWidget;
-    auto left = new QVBoxLayout(panel);
-    left->setSpacing(10);
-    scroll->setWidget(panel);
-    horizontal->addWidget(scroll);
-    auto brand = new QLabel("FiveAxisLab");
-    brand->setStyleSheet("font-size:25px;font-weight:650;color:#eef5fc;padding:4px;");
-    left->addWidget(brand);
-    auto subtitle = new QLabel("Five-axis printing research");
-    subtitle->setStyleSheet("color:#92a8bf;padding-left:4px;");
-    left->addWidget(subtitle);
-    auto machineGroup = new QGroupBox("Machine");
-    auto mf = new QFormLayout(machineGroup);
-    controller = new QComboBox;
-    controller->addItems({"Duet / RepRapFirmware", "Klipper"});
-    layout = new QComboBox;
-    layout->addItems({"Tilting and rotating bed", "Tilting toolhead"});
-    extension = new QCheckBox("Rotary-aware flow extension");
-    extension->setChecked(true);
-    mf->addRow("Controller", controller);
-    mf->addRow("Layout", layout);
-    mf->addRow(extension);
-    dummyToolhead = new QCheckBox("Generate with dummy toolhead");
-    dummyToolhead->setObjectName("dummyToolhead");
-    dummyToolhead->setToolTip("Use a synthetic nozzle, heat break, heater block and fan shroud. Your imported STEP assembly is retained.");
-    mf->addRow(dummyToolhead);
-    left->addWidget(machineGroup);
-    button("Machine setup / toolhead STEP", left, [this] { machine_setup(); });
-    button("Import toolhead STEP", left, [this] { import_step(); });
-    button("Bed, fixtures and machine bodies", left, [this] { machine_obstacles(); });
-    button("Import printable part", left, [this] { import_part(); });
-    auto processGroup = new QGroupBox("Print process");
-    auto pf = new QFormLayout(processGroup);
-    layerHeight = spin(.5, .01, 2, 3);
-    lineWidth = spin(.8, .01, 5, 3);
-    infillDensity = spin(25, 0, 100, 0);
-    speed = spin(25, .1, 1000, 1);
-    curved = new QCheckBox("Curved layers from stress field");
-    curved->setChecked(true);
-    supportMode = new QComboBox;
-    supportMode->setObjectName("supportMode");
-    supportMode->addItems({"Normal", "Reduced", "No supports"});
-    pf->addRow("Layer height · mm", layerHeight);
-    pf->addRow("Line width · mm", lineWidth);
-    pf->addRow("Infill · %", infillDensity);
-    pf->addRow("Speed · mm/s", speed);
-    pf->addRow(curved);
-    pf->addRow("Supports", supportMode);
-    left->addWidget(processGroup);
-    button("Process settings · Orca options", left, [this] { process_settings(); });
-    button("Import Orca process JSON", left, [this] { import_orca_settings(); });
-    auto structure = new QGroupBox("Strength");
-    auto sf = new QVBoxLayout(structure);
-    selection = new QComboBox;
-    selection->addItems({"Inspect faces", "Select fixed faces", "Select loaded faces"});
-    sf->addWidget(selection);
-    button("Loads, fixtures and material", sf, [this] { setup_loads(); });
-    button("Solve built-in FEA", sf, [this] { run("FEA"); });
-    button("Import FEM · Autodesk Fusion", sf, [this] { import_fem(); });
-    button("Compare with planar", sf, [this] { run("Compare"); });
-    left->addWidget(structure);
-    button("Slice + validate", left, [this] {
-        run("Slice");
-    })->setStyleSheet("background:#087f77;font-weight:600;padding:11px;");
-    button("Try collision avoidance", left, [this] { run("Repair"); });
-    button("Validate current motion", left, [this] { run("Validate"); });
-    button("Export G-code", left, [this] { export_file(); });
-    validation = new QLabel("Motion awaits validation");
-    validation->setWordWrap(true);
-    left->addWidget(validation);
-    summary = new QLabel;
-    summary->setWordWrap(true);
-    left->addWidget(summary);
-    left->addStretch();
-    auto right = new QVBoxLayout;
-    horizontal->addLayout(right, 1);
-    auto controls = new QHBoxLayout;
-    mode = new QComboBox;
-    mode->addItems({"Planned motion", "Exported G-code replay"});
-    controls->addWidget(mode);
-    auto play = new QPushButton("Play / pause");
-    controls->addWidget(play);
-    auto rate = new QComboBox;
-    rate->addItems({"0.25×", "0.5×", "1×", "2×", "5×", "10×"});
-    rate->setCurrentIndex(2);
-    controls->addWidget(rate);
-    auto follow = new QCheckBox("Follow nozzle");
-    controls->addWidget(follow);
-    auto ghost = new QCheckBox("Transparent part");
-    ghost->setChecked(true);
-    controls->addWidget(ghost);
-    auto stressOverlay = new QCheckBox("Stress");
-    controls->addWidget(stressOverlay);
-    auto next = new QPushButton("Next collision");
-    controls->addWidget(next);
-    controls->addStretch();
-    right->addLayout(controls);
-    auto pathControls = new QHBoxLayout;
-    pathControls->addWidget(new QLabel("Toolpaths"));
-    auto paths = new QComboBox;
-    paths->setObjectName("toolpathMode");
-    paths->addItems({"Full job", "Up to nozzle", "Current layer", "Hidden"});
-    pathControls->addWidget(paths);
-    auto travels = new QCheckBox("Travel paths");
-    travels->setObjectName("travelPaths");
-    travels->setChecked(true);
-    pathControls->addWidget(travels);
-    auto deposited = new QCheckBox("Deposited material");
-    deposited->setChecked(true);
-    pathControls->addWidget(deposited);
-    pathControls->addStretch();
-    right->addLayout(pathControls);
-    viewport = new Viewport;
-    viewport->setObjectName("simulationViewport");
-    connect(paths, &QComboBox::currentIndexChanged, viewport, &Viewport::set_path_mode);
-    connect(travels, &QCheckBox::toggled, viewport, &Viewport::set_travel_paths);
-    connect(deposited, &QCheckBox::toggled, viewport, &Viewport::set_deposited_visible);
-    viewport->set_project(&project);
-    right->addWidget(viewport, 1);
-    auto transport = new QHBoxLayout;
-    auto previous = new QPushButton("◀ Step");
-    auto forward = new QPushButton("Step ▶");
-    timeline = new EventTimeline;
-    timeline->setRange(0, 10000);
-    transport->addWidget(previous);
-    transport->addWidget(timeline, 1);
-    transport->addWidget(forward);
-    right->addLayout(transport);
-    log = new QTextEdit;
-    log->setReadOnly(true);
-    log->setMaximumHeight(140);
-    right->addWidget(log);
+    setWindowTitle("FiveAxisLab — five-axis research slicer");
+    resize(1600, 980);
+    setStyleSheet("QWidget{font-family:'Segoe UI';font-size:9pt;color:#353d40;background:#fafafa;}"
+        "QGroupBox{border:1px solid #dce0e1;border-radius:3px;margin-top:9px;padding-top:5px;}"
+        "QGroupBox::title{subcontrol-origin:margin;left:7px;font-weight:600;}"
+        "QPushButton,QComboBox,QLineEdit,QSpinBox,QDoubleSpinBox{background:white;border:1px solid #d6dbdd;border-radius:3px;padding:3px;}"
+        "QPushButton:hover{border-color:#00ad55;background:#effaf3;}QWidget:disabled{color:#9b9fa2;}"
+        "QScrollArea{border:0;}QTabWidget::pane{border:1px solid #dce0e1;}QTabBar::tab{padding:7px 5px;border-bottom:2px solid transparent;}"
+        "QTabBar::tab:selected{border-bottom-color:#00ad55;font-weight:600;}"
+        "QTextEdit{background:#f2f4f4;border:1px solid #dce0e1;}"
+        "QSlider::groove:horizontal{height:4px;background:#d6dcda;}QSlider::handle:horizontal{width:12px;margin:-5px 0;border-radius:6px;background:#00af55;}"
+        "QSlider::groove:vertical{width:4px;background:#d6dcda;}QSlider::handle:vertical{height:12px;margin:0 -5px;border-radius:6px;background:#00af55;}"
+        "QHeaderView::section{background:#eff1f1;border:0;padding:3px;font-weight:600;}QTableWidget{border:0;gridline-color:#e6e9e9;}"
+        "QCheckBox{spacing:5px;}QProgressBar::chunk{background:#00ad55;}");
+    auto central = new QWidget; setCentralWidget(central);
+    auto vertical = new QVBoxLayout(central); vertical->setContentsMargins(0,0,0,0); vertical->setSpacing(0);
+    auto navigation = new QWidget; navigation->setObjectName("workspaceNavigation");
+    navigation->setStyleSheet("#workspaceNavigation{background:#394345;}#workspaceNavigation QLabel{background:transparent;color:white;font-size:15px;font-weight:600;}QTabBar::tab{background:#394345;color:white;padding:10px 18px;}QTabBar::tab:selected{background:#00ad55;border:0;}QPushButton{padding:7px 15px;}");
+    auto nav=new QHBoxLayout(navigation); nav->setContentsMargins(12,0,10,0);
+    nav->addWidget(new QLabel("FiveAxisLab")); workspaces=new QTabBar; workspaces->setObjectName("workspaceTabs");
+    workspaces->addTab("Prepare"); workspaces->addTab("Preview"); nav->addWidget(workspaces);
+    auto machineButton=new QPushButton("Machine setup"); nav->addWidget(machineButton);
+    auto strengthButton=new QPushButton("Strength / FEM"); nav->addWidget(strengthButton); nav->addStretch();
+    sliceButton=new QPushButton("Slice + validate"); sliceButton->setObjectName("slicePlate");
+    sliceButton->setStyleSheet("background:#00ad55;color:white;font-weight:600;"); nav->addWidget(sliceButton);
+    exportButton=new QPushButton("Export G-code"); exportButton->setObjectName("exportGcode"); nav->addWidget(exportButton);
+    vertical->addWidget(navigation);
+    auto body=new QHBoxLayout; body->setContentsMargins(0,0,0,0); body->setSpacing(1); vertical->addLayout(body,1);
+    auto panel = new QWidget; panel->setFixedWidth(390); auto left=new QVBoxLayout(panel); left->setContentsMargins(7,5,7,5); left->setSpacing(5); body->addWidget(panel);
+    auto machineGroup=new QGroupBox("Printer · five-axis machine"); auto mf=new QFormLayout(machineGroup); mf->setContentsMargins(7,12,7,5);
+    controller=new QComboBox; controller->addItems({"Duet / RepRapFirmware","Klipper"});
+    layout=new QComboBox; layout->addItems({"Tilting and rotating bed","Tilting toolhead"});
+    extension=new QCheckBox("Rotary-aware flow extension"); extension->setChecked(true);
+    dummyToolhead=new QCheckBox("Generate with dummy toolhead"); dummyToolhead->setObjectName("dummyToolhead");
+    dummyToolhead->setToolTip("Use a synthetic nozzle, heat break, heater block and fan shroud. The imported STEP assembly is retained.");
+    mf->addRow("Controller",controller); mf->addRow("Kinematics",layout); mf->addRow(extension); mf->addRow(dummyToolhead); left->addWidget(machineGroup);
+    auto filament=new QGroupBox("Project filament · one extruder"); auto ff=new QFormLayout(filament); ff->setContentsMargins(7,12,7,5);
+    filamentName=new QLineEdit; filamentName->setObjectName("filamentName"); ff->addRow("Filament",filamentName);
+    auto material=new QWidget; auto materialRow=new QHBoxLayout(material); materialRow->setContentsMargins(0,0,0,0);
+    filamentDensity=spin(1.24,.1,5,3); filamentDensity->setSuffix(" g/cm³"); filamentDensity->setObjectName("filamentDensity");
+    filamentCost=spin(25,0,10000,2); filamentCost->setSuffix(" EUR/kg"); filamentCost->setObjectName("filamentCost");
+    materialRow->addWidget(filamentDensity); materialRow->addWidget(filamentCost); ff->addRow(material); left->addWidget(filament);
+    auto presets=new QHBoxLayout; auto preset=new QComboBox; preset->setObjectName("processPreset"); preset->addItems({"Custom research process","0.30 mm · 0.6 mm nozzle · screenshot reference"});
+    preset->setToolTip("The screenshot reference contains implemented settings. Machine limits still apply; it is not a calibrated Bambu preset."); presets->addWidget(preset,1);
+    auto importPreset=new QPushButton("Load"); auto savePreset=new QPushButton("Save"); presets->addWidget(importPreset); presets->addWidget(savePreset); left->addLayout(presets);
+    processEditor=new ProcessEditor; left->addWidget(processEditor,1);
+    // Bind the compact editor to the same fields used by project refresh.
+    layerHeight=processEditor->findChild<QDoubleSpinBox*>("layerHeight"); lineWidth=processEditor->findChild<QDoubleSpinBox*>("width");
+    infillDensity=processEditor->findChild<QDoubleSpinBox*>("infill"); speed=processEditor->findChild<QDoubleSpinBox*>("speed");
+    curved=processEditor->findChild<QCheckBox*>("curved"); supportMode=processEditor->findChild<QComboBox*>("supportMode");
+    processError=new QLabel; processError->setObjectName("processValidationError"); processError->setWordWrap(true); processError->setStyleSheet("color:#bc3030;"); left->addWidget(processError);
+    validation=new QLabel; validation->setWordWrap(true); left->addWidget(validation);
+    summary=new QLabel; summary->setWordWrap(true); summary->hide(); left->addWidget(summary);
+    auto right=new QVBoxLayout; right->setContentsMargins(5,5,5,5); right->setSpacing(5); body->addLayout(right,1);
+    auto toolbar=new QHBoxLayout;
+    auto importPart=new QPushButton("Import part"); importPart->setIcon(style()->standardIcon(QStyle::SP_FileIcon)); toolbar->addWidget(importPart);
+    auto importHead=new QPushButton("Import toolhead STEP"); toolbar->addWidget(importHead);
+    auto fitButton=new QPushButton("Fit view"); toolbar->addWidget(fitButton);
+    partName=new QLabel; partName->setObjectName("partObjectName"); toolbar->addWidget(partName); toolbar->addStretch(); right->addLayout(toolbar);
+    auto controlsPanel=new QWidget; controlsPanel->setObjectName("simulationControls"); auto controls = new QHBoxLayout(controlsPanel); controls->setContentsMargins(0,0,0,0);
+    mode = new QComboBox; mode->addItems({"Planned motion", "Exported G-code replay"}); controls->addWidget(mode);
+    auto play = new QPushButton("Play / pause"); controls->addWidget(play);
+    auto rate = new QComboBox; rate->addItems({"0.25×", "0.5×", "1×", "2×", "5×", "10×"}); rate->setCurrentIndex(2); controls->addWidget(rate);
+    auto follow = new QCheckBox("Follow nozzle"); controls->addWidget(follow);
+    auto ghost = new QCheckBox("Transparent part"); ghost->setChecked(true); controls->addWidget(ghost);
+    auto stressOverlay = new QCheckBox("Stress"); controls->addWidget(stressOverlay);
+    auto next = new QPushButton("Next collision"); controls->addWidget(next); controls->addStretch(); right->addWidget(controlsPanel);
+    auto pathsPanel=new QWidget; pathsPanel->setObjectName("simulationPaths"); auto pathControls = new QHBoxLayout(pathsPanel); pathControls->setContentsMargins(0,0,0,0); pathControls->addWidget(new QLabel("Toolpaths"));
+    auto paths = new QComboBox; paths->setObjectName("toolpathMode"); paths->addItems({"Full job", "Up to nozzle", "Current layer", "Hidden"}); pathControls->addWidget(paths);
+    auto travels = new QCheckBox("Travel paths"); travels->setObjectName("travelPaths"); travels->setChecked(true); pathControls->addWidget(travels);
+    auto deposited = new QCheckBox("Deposited material"); deposited->setChecked(true); pathControls->addWidget(deposited); pathControls->addStretch(); right->addWidget(pathsPanel);
+    viewport=new Viewport; viewport->setObjectName("simulationViewport");
+    connect(paths,&QComboBox::currentIndexChanged,viewport,&Viewport::set_path_mode);
+    connect(travels,&QCheckBox::toggled,viewport,&Viewport::set_travel_paths);
+    connect(deposited,&QCheckBox::toggled,viewport,&Viewport::set_deposited_visible);
+    auto showHead=new QCheckBox("Toolhead"); showHead->setChecked(true); showHead->setObjectName("showToolhead"); pathControls->insertWidget(4,showHead);
+    connect(showHead,&QCheckBox::toggled,viewport,&Viewport::set_toolhead_visible);
+    auto canvas=new QHBoxLayout; canvas->setSpacing(6); canvas->addWidget(viewport,1); canvas->addWidget(create_preview_inspector()); right->addLayout(canvas,1);
+    auto transportPanel=new QWidget; transportPanel->setObjectName("simulationTransport"); auto transport=new QHBoxLayout(transportPanel); transport->setContentsMargins(0,0,0,0); auto previous=new QPushButton("◀ Step"),forward=new QPushButton("Step ▶");
+    timeline=new EventTimeline; timeline->setObjectName("moveTimeline"); timeline->setRange(0,10000);
+    transport->addWidget(previous); transport->addWidget(timeline,1); transport->addWidget(forward); right->addWidget(transportPanel);
+    log=new QTextEdit; log->setReadOnly(true); log->setMaximumHeight(70); log->setObjectName("researchLog"); right->addWidget(log);
+    connect(importPart,&QPushButton::clicked,this,&MainWindow::import_part); connect(importHead,&QPushButton::clicked,this,&MainWindow::import_step);
+    connect(fitButton,&QPushButton::clicked,viewport,&Viewport::fit); connect(machineButton,&QPushButton::clicked,this,&MainWindow::machine_setup);
+    selection=new QComboBox; selection->addItems({"Inspect faces","Select fixed faces","Select loaded faces"}); selection->hide(); selection->setParent(panel);
+    auto strengthMenu=new QMenu(strengthButton); strengthMenu->addAction("Loads, fixtures and material",this,&MainWindow::setup_loads);
+    strengthMenu->addAction("Select fixed faces",this,[this]{selection->setCurrentIndex(1);statusBar()->showMessage("Click part faces to select fixtures");});
+    strengthMenu->addAction("Select loaded faces",this,[this]{selection->setCurrentIndex(2);statusBar()->showMessage("Click part faces to apply forces");});
+    strengthMenu->addAction("Inspect faces",this,[this]{selection->setCurrentIndex(0);});
+    strengthMenu->addAction("Solve built-in FEA",this,[this]{run("FEA");}); strengthMenu->addAction("Import FEM · Autodesk Fusion",this,&MainWindow::import_fem);
+    strengthMenu->addAction("Compare with planar",this,[this]{run("Compare");}); strengthButton->setMenu(strengthMenu);
+    connect(sliceButton,&QPushButton::clicked,this,[this]{set_workspace(1);run("Slice");}); connect(exportButton,&QPushButton::clicked,this,&MainWindow::export_file);
+    connect(workspaces,&QTabBar::currentChanged,this,&MainWindow::set_workspace);
+    connect(importPreset,&QPushButton::clicked,this,&MainWindow::import_orca_settings);
+    connect(preset,&QComboBox::currentIndexChanged,this,[this](int index){
+        if(index!=1 || worker.isRunning()) return;
+        QFile file(":/presets/orca-screenshots.json"); if(!file.open(QIODevice::ReadOnly)) {show_error("Bundled process preset is missing");return;}
+        auto next=read_process(QJsonDocument::fromJson(file.readAll()).object());
+        if(next.nozzleDiameter!=project.process.nozzleDiameter) project.dummyToolhead=make_dummy_toolhead(next.nozzleDiameter);
+        project.process=next; project.invalidate(); replaying=false; processEditor->set_settings(next); refresh();
+    });
+    connect(savePreset,&QPushButton::clicked,this,[this]{ if(!processEditor->valid()) return; auto file=QFileDialog::getSaveFileName(this,"Save process preset",{},"FiveAxisLab process (*.json)"); if(file.isEmpty()) return; QFile output(file); if(output.open(QIODevice::WriteOnly)) output.write(QJsonDocument(process_json(project.process)).toJson()); else show_error("Cannot save process preset"); });
     progress = new QProgressBar;
     progress->setRange(0, 100);
     progress->setVisible(false);
@@ -303,6 +266,13 @@ MainWindow::MainWindow() : project(demo_project()) {
         }
     });
     file->addAction("Exit", this, &QWidget::close);
+    auto processMenu=menuBar()->addMenu("Process");
+    processMenu->addAction("Process settings · Orca options",this,&MainWindow::process_settings);
+    processMenu->addAction("Import Orca / FiveAxisLab process JSON",this,&MainWindow::import_orca_settings);
+    auto machineMenu=menuBar()->addMenu("Machine"); machineMenu->addAction("Setup / toolhead calibration",this,&MainWindow::machine_setup);
+    machineMenu->addAction("Bed, fixtures and machine bodies",this,&MainWindow::machine_obstacles);
+    auto simulationMenu=menuBar()->addMenu("Simulation"); simulationMenu->addAction("Try collision avoidance",this,[this]{run("Repair");});
+    simulationMenu->addAction("Validate current motion",this,[this]{run("Validate");});
     auto view = menuBar()->addMenu("View");
     view->addAction("Fit geometry", viewport, &Viewport::fit);
     view->addAction("Save preview image…", this, [this] {
@@ -387,22 +357,17 @@ MainWindow::MainWindow() : project(demo_project()) {
         project.machine.klipperExtension = v;
         invalidate();
     });
-    auto settings = [this] {
-        project.process.layerHeight = layerHeight->value();
-        project.process.width = lineWidth->value();
-        project.process.infill = infillDensity->value() / 100;
-        project.process.speed = speed->value();
-        project.process.curved = curved->isChecked();
-        project.process.supportMode = SupportMode(supportMode->currentIndex());
-        project.process.supports = supportMode->currentIndex()!=2;
-        project.invalidate();
-        refresh();
-    };
-    for (auto *s : {layerHeight, lineWidth, infillDensity, speed})
-        connect(s, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
-                [settings](double) { settings(); });
-    connect(curved, &QCheckBox::toggled, this, [settings](bool) { settings(); });
-    connect(supportMode, &QComboBox::currentIndexChanged, this, [settings](int) { settings(); });
+    connect(processEditor,&ProcessEditor::edited,this,[this] {
+        if(auto preset=findChild<QComboBox*>("processPreset")){QSignalBlocker guard(preset);preset->setCurrentIndex(0);}
+        if(!processEditor->valid()) { project.invalidate(); processError->setText(processEditor->validation_error()); sliceButton->setEnabled(false); exportButton->setEnabled(false); return; }
+        auto next=processEditor->settings();
+        if(next.nozzleDiameter!=project.process.nozzleDiameter) project.dummyToolhead=make_dummy_toolhead(next.nozzleDiameter);
+        project.process=next; project.invalidate(); replaying=false; refresh();
+    });
+    auto filamentChanged=[this] { project.filamentName=filamentName->text(); project.filamentDensity=filamentDensity->value(); project.filamentCost=filamentCost->value(); refresh_preview(true); };
+    connect(filamentName,&QLineEdit::editingFinished,this,filamentChanged);
+    connect(filamentDensity,qOverload<double>(&QDoubleSpinBox::valueChanged),this,[filamentChanged]{filamentChanged();});
+    connect(filamentCost,qOverload<double>(&QDoubleSpinBox::valueChanged),this,[filamentChanged]{filamentChanged();});
     connect(dummyToolhead, &QCheckBox::toggled, this, [this](bool enabled) {
         if(enabled && project.dummyToolhead.components.empty())
             project.dummyToolhead = make_dummy_toolhead(project.process.nozzleDiameter);
@@ -449,6 +414,7 @@ MainWindow::MainWindow() : project(demo_project()) {
                 replay = std::move(result.project);
                 replaying = true;
                 viewport->set_project(&replay);
+                refresh_preview();
                 seek(0);
             }
         } else {
@@ -469,6 +435,7 @@ MainWindow::MainWindow() : project(demo_project()) {
     log->append("Open a part and STEP toolhead, or use the synthetic reference machine. Select faces for FEA "
                 "loads and fixtures. Validation is required before export.");
     refresh();
+    set_workspace(0);
 }
 MainWindow::~MainWindow() {
     if (cancelled)
@@ -480,18 +447,14 @@ void MainWindow::show_error(const QString &message) {
     statusBar()->showMessage(message, 12000);
 }
 void MainWindow::refresh() {
-    QSignalBlocker a(controller), b(layout), c(extension), d(layerHeight), e(lineWidth), f(infillDensity),
-        g(speed), h(curved), i(supportMode), j(dummyToolhead);
-    controller->setCurrentIndex(int(project.machine.controller));
-    layout->setCurrentIndex(int(project.machine.layout));
-    extension->setChecked(project.machine.klipperExtension);
-    extension->setEnabled(project.machine.controller == Controller::Klipper);
-    layerHeight->setValue(project.process.layerHeight);
-    lineWidth->setValue(project.process.width);
-    infillDensity->setValue(project.process.infill * 100);
-    speed->setValue(project.process.speed);
-    curved->setChecked(project.process.curved);
-    supportMode->setCurrentIndex(project.process.supports?int(project.process.supportMode):2);
+    QSignalBlocker a(controller), b(layout), c(extension), j(dummyToolhead), densityGuard(filamentDensity),costGuard(filamentCost);
+    controller->setCurrentIndex(int(project.machine.controller)); layout->setCurrentIndex(int(project.machine.layout));
+    extension->setChecked(project.machine.klipperExtension); extension->setEnabled(project.machine.controller==Controller::Klipper);
+    QSignalBlocker modeGuard(mode); mode->setCurrentIndex(replaying?1:0);
+    if(processEditor->valid()) processEditor->set_settings(project.process);
+    processError->setText(processEditor->validation_error()); sliceButton->setEnabled(processEditor->valid());
+    filamentName->setText(project.filamentName); filamentDensity->setValue(project.filamentDensity); filamentCost->setValue(project.filamentCost);
+    partName->setText(project.part.empty()?"No printable part":QFileInfo(project.part.name).fileName()+" · Global settings");
     dummyToolhead->setChecked(project.useDummyToolhead);
     viewport->set_project(&project);
     viewport->set_selected(fixedFaces, forceFaces);
@@ -516,6 +479,8 @@ void MainWindow::refresh() {
                   .arg(project.report.checkedIntervals)
             : QString("Export blocked\n%1 collision / unresolved events").arg(project.report.events.size()));
     validation->setStyleSheet(current ? "color:#59d5b7;" : "color:#eeb862;");
+    exportButton->setEnabled(current && processEditor->valid());
+    refresh_preview();
     double supportVolume=0;
     for(const auto &sample:project.path)
         if(sample.role==Role::Support && sample.deltaE>0)
@@ -555,6 +520,7 @@ void MainWindow::execute(const QString &label, std::function<void(Project &, std
         }));
 }
 void MainWindow::run(const QString &operation) {
+    if(!processEditor->valid()) { show_error(processEditor->validation_error()); return; }
     execute(operation, [operation](Project &p, std::atomic_bool *cancel) {
         if (operation == "Slice") {
             slice_project(p, cancel);
@@ -592,8 +558,18 @@ void MainWindow::import_part() {
                                              "Meshes and CAD (*.stl *.obj *.3mf *.step *.stp)");
     if (file.isEmpty())
         return;
-    execute("Import part", [file](Project &p, std::atomic_bool *) {
-        p.part = load_mesh(file);
+    ToolheadAssembly cad;
+    bool isStep=file.endsWith(".step",Qt::CaseInsensitive)||file.endsWith(".stp",Qt::CaseInsensitive);
+    if(isStep && !import_step_dialog(this,file,cad,false)) return;
+    execute("Import part", [file,cad,isStep](Project &p, std::atomic_bool *) {
+        if(isStep) {
+            p.part={}; p.part.name=file;
+            for(const auto &component:cad.components) {
+                int offset=int(p.part.vertices.size()); p.part.vertices.insert(p.part.vertices.end(),component.mesh.vertices.begin(),component.mesh.vertices.end());
+                for(auto face:component.mesh.triangles) p.part.triangles.push_back(face+Eigen::Vector3i::Constant(offset));
+                p.part.error=std::max(p.part.error,component.mesh.error);
+            }
+        } else p.part = load_mesh(file);
         Vec3 offset = p.part.bounds().center();
         offset.z() = p.part.bounds().min().z();
         for (auto &v : p.part.vertices)
@@ -614,13 +590,10 @@ void MainWindow::import_step() {
                                              "STEP assemblies (*.step *.stp)");
     if (file.isEmpty())
         return;
-    execute("Import STEP assembly", [file](Project &p, std::atomic_bool *cancel) {
-        p.toolhead = load_step_assembly(file, .02, cancel);
-        p.useDummyToolhead = false;
-        p.invalidate();
-        p.diagnostics
-            << "Toolhead imported. Open Machine setup to calibrate the nozzle tip, axis and moving links.";
-    });
+    ToolheadAssembly assembly; if(!import_step_dialog(this,file,assembly,true)) return;
+    project.toolhead=std::move(assembly); project.useDummyToolhead=false; project.invalidate(); replaying=false; refresh();
+    log->append("Toolhead imported. Open Machine setup to calibrate the nozzle tip, axis and moving links.");
+
 }
 void MainWindow::machine_setup() {
     if (worker.isRunning())
@@ -1030,6 +1003,7 @@ void MainWindow::setup_loads() {
     }
 }
 void MainWindow::export_file() {
+    if(!processEditor->valid()) {show_error(processEditor->validation_error());return;}
     try {
         auto text = export_gcode(project);
         auto f =
@@ -1062,7 +1036,9 @@ void MainWindow::load(const QString &filename) {
         fixedFaces.clear();
         forceFaces.clear();
         replaying = false;
+        processEditor->set_settings(project.process);
         refresh();
+        set_workspace(project.path.empty()?0:1);
         viewport->fit();
         seek(0);
     } catch (const std::exception &e) {
@@ -1086,8 +1062,10 @@ void MainWindow::seek(double t) {
     QSignalBlocker blocker(timeline);
     timeline->setValue(p.path.back().time > 0 ? int(time / p.path.back().time * 10000) : 0);
     viewport->set_time(time);
+    update_move_preview();
 }
 void MainWindow::capture(const QString &filename) {
+    set_workspace(project.path.empty()?0:1);
     seek(project.path.empty() ? 0 : project.path.back().time * .65);
     viewport->repaint();
     grab().save(filename);

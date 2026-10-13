@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/presets">
+    <file alias="orca-screenshots.json">../../examples/process/orca-screenshots.json</file>
+  </qresource>
+</RCC>

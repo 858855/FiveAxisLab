@@ -149,6 +149,11 @@ QString role_name(Role r) {
         return "Outer wall";
     case Role::SolidInfill:
         return "Solid infill";
+    case Role::TopSurface: return "Top surface";
+    case Role::BottomSurface: return "Bottom surface";
+    case Role::Brim: return "Brim";
+    case Role::Skirt: return "Skirt";
+    case Role::Bridge: return "Bridge";
     case Role::Infill:
         return "Infill";
     case Role::Support:
@@ -172,6 +177,7 @@ QString Project::fingerprint() const {
     json.remove("depositionValid");
     json.remove("comparison");
     json.remove("deposition");
+    json.remove("filament");
     return QString::fromLatin1(QCryptographicHash::hash(QJsonDocument(json).toJson(QJsonDocument::Compact),
                                                         QCryptographicHash::Sha256)
                                    .toHex());

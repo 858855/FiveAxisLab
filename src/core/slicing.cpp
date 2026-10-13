@@ -1,4 +1,8 @@
 #include "slicing.h"
+#include <boost/geometry.hpp>
+#include <boost/geometry/geometries/point_xy.hpp>
+#include <boost/geometry/geometries/polygon.hpp>
+#include <boost/geometry/geometries/multi_polygon.hpp>
 #include "geometry.h"
 #include "stress.h"
 #include "process.h"
@@ -255,8 +259,29 @@ static std::vector<Surface> decompose_surface(const Surface &s) {
         result.push_back(std::move(item.second));
     return result;
 }
-static void add_curve(Project &p, const std::vector<std::pair<Vec3, Vec3>> &curve, Role role, int layer,
+using Curve = std::vector<std::pair<Vec3, Vec3>>;
+static Curve simplify_curve(const Curve &curve, double tolerance, double angularTolerance) {
+    if (curve.size()<3 || tolerance<=0) return curve;
+    std::vector<bool> keep(curve.size(),false); keep.front()=keep.back()=true;
+    std::function<void(size_t,size_t)> visit=[&](size_t first,size_t last) {
+        if(last<=first+1) return;
+        Vec3 delta=curve[last].first-curve[first].first; double worst=-1; size_t chosen=first;
+        for(size_t i=first+1;i<last;++i) {
+            double u=delta.squaredNorm()>1e-16 ? std::clamp((curve[i].first-curve[first].first).dot(delta)/delta.squaredNorm(),0.0,1.0) : 0;
+            Vec3 normal=curve[first].second*(1-u)+curve[last].second*u;
+            double error=(curve[i].first-curve[first].first-u*delta).norm()/tolerance;
+            if(normal.norm()<1e-8 || normal.normalized().dot(curve[i].second)<std::cos(angularTolerance)) error=std::max(error,2.0);
+            if(error>worst) { worst=error; chosen=i; }
+        }
+        if(worst>1) { keep[chosen]=true; visit(first,chosen); visit(chosen,last); }
+    };
+    visit(0,curve.size()-1); Curve out;
+    for(size_t i=0;i<curve.size();++i) if(keep[i]) out.push_back(curve[i]);
+    return out;
+}
+static void add_curve(Project &p, const Curve &input, Role role, int layer,
                       int region) {
+    auto curve=simplify_curve(input,std::min(p.process.resolution,p.machine.chordTolerance),p.machine.angularTolerance*.5);
     if (curve.size() < 2)
         return;
     double width = extrusion_width(p.process, role, layer), height = extrusion_height(p.process, layer);
@@ -282,6 +307,10 @@ static void add_curve(Project &p, const std::vector<std::pair<Vec3, Vec3>> &curv
     p.path.push_back(start);
     start.position = curve.front().first;
     p.path.push_back(start);
+    double curveLength=0; for(size_t i=1;i<curve.size();++i) curveLength+=(curve[i].first-curve[i-1].first).norm();
+    double requestedSpeed=process_speed(p.process,role,layer);
+    if((role==Role::Wall || role==Role::OuterWall) && p.process.smallWallThreshold>0 &&
+       curveLength<pi*p.process.smallWallThreshold) requestedSpeed=p.process.smallWallAbsoluteSpeed>0?std::min(requestedSpeed,p.process.smallWallAbsoluteSpeed):requestedSpeed*p.process.smallWallSpeed;
     for (size_t i = 1; i < curve.size(); ++i) {
         double length = (curve[i].first - curve[i - 1].first).norm();
         int count = std::max(1, int(std::ceil(length / .7)));
@@ -295,7 +324,17 @@ static void add_curve(Project &p, const std::vector<std::pair<Vec3, Vec3>> &curv
             s.region = region;
             s.width = width;
             s.height = height;
-            s.speed = process_speed(p.process, role, layer);
+            s.speed = requestedSpeed;
+            if(p.process.slowOverhangs && layer>0 && role!=Role::Support && role!=Role::Brim && role!=Role::Skirt) {
+                int unsupported=0;
+                for(int k=0;k<10;++k) {
+                    Vec3 side=s.direction.cross((curve[i].first-curve[i-1].first).normalized());
+                    Vec3 probe=s.position-s.direction*height*1.25+side*width*(double(k)/9-.5);
+                    unsupported+=!contains(p.part,probe);
+                }
+                int band=unsupported<=1?0:unsupported<=2?1:unsupported<=5?2:unsupported<=7?3:4;
+                if(p.process.overhangSpeeds[band]>0) s.speed=std::min(s.speed,p.process.overhangSpeeds[band]);
+            }
             s.deltaE = (s.position - p.path.back().position).norm() * area / filament;
             p.path.push_back(s);
         }
@@ -308,12 +347,59 @@ static double wall_offset(const ProcessSettings &s, int wall, int layer) {
     return distance;
 }
 static double wall_band(const ProcessSettings &s, int layer) {
-    return s.wallCount>0 ? wall_offset(s,s.wallCount-1,layer)+extrusion_width(s,Role::Wall,layer)/2 : 0;
+    int count=effective_walls(s,layer);
+    return count>0 ? wall_offset(s,count-1,layer)+extrusion_width(s,Role::Wall,layer)/2 : 0;
 }
-static void walls(Project &p, const Surface &s, int layer, int &region) {
-    for (int index = 0; index < p.process.wallCount; ++index) {
-        int wall=p.process.outerWallFirst?index:p.process.wallCount-index-1;
-        double target = wall_offset(p.process,wall,layer);
+static bool inside_xy(const Curve &curve,const Vec3 &point) {
+    bool inside=false;
+    for(size_t i=0,j=curve.size()-1;i<curve.size();j=i++) {
+        const auto &a=curve[i].first; const auto &b=curve[j].first;
+        if((a.y()>point.y())!=(b.y()>point.y()) && point.x()<(b.x()-a.x())*(point.y()-a.y())/(b.y()-a.y())+a.x()) inside=!inside;
+    }
+    return inside;
+}
+static void offset_curve(Curve &curve,double amount) {
+    if(std::abs(amount)<1e-10 || curve.size()<4 || (curve.front().first-curve.back().first).norm()>1e-6) return;
+    namespace bg=boost::geometry;
+    using Point=bg::model::d2::point_xy<double>;
+    using Polygon=bg::model::polygon<Point>;
+    auto original=simplify_curve(curve,.001,.001); Polygon polygon;
+    for(const auto &p:original) bg::append(polygon.outer(),Point(p.first.x(),p.first.y()));
+    bg::correct(polygon);
+    bg::model::multi_polygon<Polygon> result;
+    bg::strategy::buffer::distance_symmetric<double> distance(amount);
+    bg::strategy::buffer::side_straight side;
+    bg::strategy::buffer::join_miter join(4);
+    bg::strategy::buffer::end_flat end;
+    bg::strategy::buffer::point_circle point(12);
+    bg::buffer(polygon,result,distance,side,join,end,point);
+    if(result.size()!=1 || result.front().outer().size()<4 || !result.front().inners().empty())
+        throw std::runtime_error("XY offset collapses or splits a contour; reduce compensation or adhesion width");
+    Curve output;
+    for(const auto &p:result.front().outer()) {
+        Eigen::Vector2d xy(bg::get<0>(p),bg::get<1>(p)); double best=1e100; Vec3 surface=Vec3::Zero(),normal=Vec3::UnitZ();
+        for(size_t i=1;i<original.size();++i) {
+            Vec3 delta=original[i].first-original[i-1].first; double length=delta.head<2>().squaredNorm();
+            double u=length>1e-16?std::clamp((xy-original[i-1].first.head<2>()).dot(delta.head<2>())/length,0.0,1.0):0;
+            Vec3 candidate=original[i-1].first+u*delta; double error=(xy-candidate.head<2>()).squaredNorm();
+            if(error<best) {best=error;surface=candidate;normal=(original[i-1].second*(1-u)+original[i].second*u).normalized();}
+        }
+        if(std::abs(normal.z())<.1) throw std::runtime_error("XY compensation requires layer normals with a Z component");
+        Vec3 displacement(xy.x()-surface.x(),xy.y()-surface.y(),0);
+        displacement.z()=-(normal.x()*displacement.x()+normal.y()*displacement.y())/normal.z();
+        output.push_back({surface+displacement,normal});
+    }
+    output.pop_back(); size_t seam=0; double nearest=1e100;
+    for(size_t i=0;i<output.size();++i) {double d=(output[i].first-curve.front().first).squaredNorm();if(d<nearest){nearest=d;seam=i;}}
+    std::rotate(output.begin(),output.begin()+seam,output.end()); output.push_back(output.front()); curve=std::move(output);
+}
+
+static void walls(Project &p, const Surface &s, int layer, int &region, int count=-1,
+                  Role forced=Role::Travel,double firstOffset=0,double spacing=0,double outside=0,int boundaryKind=0) {
+    if(count<0) count=effective_walls(p.process,layer);
+    for (int index = 0; index < count; ++index) {
+        int wall=forced!=Role::Travel || p.process.outerWallFirst?index:count-index-1;
+        double target = forced==Role::Travel ? wall_offset(p.process,wall,layer) : firstOffset+index*spacing;
         std::vector<std::pair<Vec3, Vec3>> ends;
         std::vector<std::pair<int, int>> edges;
         std::map<std::array<long long, 3>, int> ids;
@@ -351,6 +437,7 @@ static void walls(Project &p, const Surface &s, int layer, int &region) {
             adjacency[b].push_back(a);
         }
         std::set<std::pair<int, int>> used;
+        std::vector<Curve> curves;
         for (auto edge : edges) {
             auto key = std::minmax(edge.first, edge.second);
             if (used.count(key))
@@ -397,18 +484,38 @@ static void walls(Project &p, const Surface &s, int layer, int &region) {
                 std::rotate(curve.begin(), curve.begin() + seam, curve.end());
                 curve.push_back(curve.front());
             }
-            add_curve(p, curve, wall==0?Role::OuterWall:Role::Wall, layer, region++);
+            curves.push_back(std::move(curve));
+        }
+        for(auto &curve:curves) {
+            int depth=0; for(const auto &other:curves) if(&other!=&curve && inside_xy(other,curve.front().first)) ++depth;
+            if((boundaryKind==1 && depth%2) || (boundaryKind==2 && !(depth%2))) continue;
+            if(forced==Role::Travel && curve.size()>3 && (curve.front().first-curve.back().first).norm()<1e-6) {
+                double amount=depth%2 ? p.process.holeCompensation : p.process.contourCompensation;
+                if(layer==0) amount+=(depth%2?1:-1)*p.process.elephantFoot;
+                offset_curve(curve,amount);
+            }
+            if(outside!=0) offset_curve(curve,(depth%2?-1:1)*outside);
+            add_curve(p, curve, forced!=Role::Travel?forced:wall==0?Role::OuterWall:Role::Wall, layer, region++);
         }
     }
 }
-static void infill(Project &p, const Surface &surface, int layer, int &region, bool solid) {
+static void infill(Project &p, const Surface &surface, int layer, int &region, Role role) {
+    bool solid=role!=Role::Infill;
     if ((!solid && p.process.infill <= 0) || surface.mesh.empty())
         return;
-    Role role=solid?Role::SolidInfill:Role::Infill;
+    double density=role==Role::TopSurface?p.process.topDensity:role==Role::BottomSurface?p.process.bottomDensity:solid?1:p.process.infill;
+    if(density<=0) return;
     int families=!solid && p.process.infillPattern==InfillPattern::Grid?2:1;
     double width=extrusion_width(p.process,role,layer);
-    double spacing = bead_spacing(width, extrusion_height(p.process,layer)) / (solid?1:p.process.infill) * families;
+    double spacing = bead_spacing(width, extrusion_height(p.process,layer)) / density * families;
+    auto pattern=role==Role::TopSurface?p.process.topPattern:p.process.bottomPattern;
+    if(solid && pattern==SurfacePattern::Concentric) {
+        double start=wall_band(p.process,layer)+width/2;
+        double maximum=*std::max_element(surface.distance.begin(),surface.distance.end());
+        walls(p,surface,layer,region,std::max(0,int(std::ceil((maximum-start)/spacing))),role,start,spacing); return;
+    }
     auto b = surface.mesh.bounds();
+    std::vector<Curve> curves;
     for(int family=0;family<families;++family) {
     std::vector<Eigen::Vector2d> covered;
     auto near = [&](Eigen::Vector2d q, double distance) {
@@ -470,23 +577,35 @@ static void infill(Project &p, const Surface &surface, int layer, int &region, b
             if (curve.size() > 1) {
                 for (auto &q : curve)
                     covered.push_back(q.first.head<2>());
-                add_curve(p, curve, role, layer, region++);
+                curves.push_back(std::move(curve));
             }
         }
     }
+    if(solid && pattern==SurfacePattern::Monotonic) {
+        double angle=p.process.infillAngle+(layer%2)*pi/2; Vec3 direction(std::cos(angle),std::sin(angle),0),side(-direction.y(),direction.x(),0);
+        for(auto &curve:curves) if((curve.back().first-curve.front().first).dot(direction)<0) std::reverse(curve.begin(),curve.end());
+        std::stable_sort(curves.begin(),curves.end(),[&](const Curve &a,const Curve &b) { return a.front().first.dot(side)<b.front().first.dot(side); });
+    }
+    for(const auto &curve:curves) add_curve(p,curve,role,layer,region++);
 }
 static void support_columns(Project &p) {
     if (!p.process.supports || p.process.supportMode==SupportMode::None) {
         p.diagnostics << "Support generation disabled; unsupported deposition is still checked.";
         return;
     }
-    double width = p.process.width;
+    double width = extrusion_width(p.process,Role::Support,1);
     double pitch=width+p.process.supportSpacing;
     if(p.process.supportMode==SupportMode::Reduced) pitch*=p.process.supportReduction;
     std::map<std::pair<int, int>, double> columns;
     for (auto &s : p.path)
-        if (s.deltaE > 0 && s.position.z() > 2 * p.process.layerHeight &&
+        if (s.deltaE > 0 && s.role!=Role::Brim && s.role!=Role::Skirt && s.position.z() > 2 * p.process.layerHeight &&
             !contains(p.part, s.position - Vec3(0, 0, 1.5 * p.process.layerHeight))) {
+            if(p.process.supportAngle>0) {
+                double reach=1.5*p.process.layerHeight/std::tan(p.process.supportAngle); bool supported=false;
+                for(const Vec3 &axis:{Vec3::UnitX().eval(),Vec3::UnitY().eval(),(-Vec3::UnitX()).eval(),(-Vec3::UnitY()).eval()})
+                    supported|=contains(p.part,s.position-Vec3(0,0,1.5*p.process.layerHeight)+axis*reach);
+                if(supported) continue;
+            }
             int x = int(std::round(s.position.x() / pitch)), y = int(std::round(s.position.y() / pitch));
             double top = s.position.z() - s.height;
             auto key = std::make_pair(x, y);
@@ -494,6 +613,21 @@ static void support_columns(Project &p) {
         }
     if (columns.empty())
         return;
+    if(p.process.supportBedOnly) for(auto it=columns.begin();it!=columns.end();) {
+        bool blocked=false;
+        for(double z=p.process.layerHeight;z<it->second-p.process.layerHeight;z+=p.process.layerHeight)
+            if(contains(p.part,Vec3(it->first.first*pitch,it->first.second*pitch,z))) { blocked=true; break; }
+        if(blocked) it=columns.erase(it); else ++it;
+    }
+    if(p.process.removeSmallOverhangs) {
+        auto snapshot=columns;
+        for(auto it=columns.begin();it!=columns.end();) {
+            bool neighbor=false;
+            for(auto offset:{std::make_pair(1,0),std::make_pair(-1,0),std::make_pair(0,1),std::make_pair(0,-1)})
+                neighbor|=snapshot.count({it->first.first+offset.first,it->first.second+offset.second})>0;
+            if(!neighbor) it=columns.erase(it); else ++it;
+        }
+    }
     auto original = std::move(p.path);
     p.path.clear();
     double maxZ = 0;
@@ -512,7 +646,26 @@ static void support_columns(Project &p) {
                            {center + Vec3(width / 3, 0, 0), Vec3::UnitZ()}},
                           Role::Support, supportLayer, region--);
             }
-    p.path.insert(p.path.end(), original.begin(), original.end());
+    // Schedule deposited support and part curves in layer order. Future support is never an obstacle.
+    struct Block { int layer; bool support; std::vector<Sample> samples; };
+    std::vector<Block> blocks;
+    auto collect=[&](const std::vector<Sample> &path,bool support) {
+        for(size_t i=1;i<path.size();) {
+            if(path[i].deltaE<=0) { ++i; continue; }
+            Block block{path[i].layer,support,{path[i-1]}}; int region=path[i].region;
+            while(i<path.size() && path[i].deltaE>0 && path[i].region==region) block.samples.push_back(path[i++]);
+            blocks.push_back(std::move(block));
+        }
+    };
+    collect(p.path,true); collect(original,false);
+    std::stable_sort(blocks.begin(),blocks.end(),[](const Block &a,const Block &b) { return a.layer!=b.layer?a.layer<b.layer:a.support>b.support; });
+    p.path.clear();
+    for(const auto &block:blocks) {
+        if(!p.path.empty()) { auto lift=p.path.back(); lift.position+=Vec3(0,0,p.process.travelLift); lift.role=Role::Travel; lift.deltaE=0; lift.speed=p.process.travelSpeed; lift.layer=block.layer; p.path.push_back(lift); }
+        auto entry=block.samples.front(); entry.deltaE=0; entry.role=Role::Travel; entry.layer=block.layer; entry.speed=p.process.travelSpeed;
+        auto lift=entry; lift.position+=Vec3(0,0,p.process.travelLift); p.path.push_back(lift); p.path.push_back(entry);
+        p.path.insert(p.path.end(),block.samples.begin()+1,block.samples.end());
+    }
     p.diagnostics << QString(
                          "Generated %1 support columns (%2, spacing %3 mm); deposition and collision checks remain required.")
                          .arg(columns.size()).arg(p.process.supportMode==SupportMode::Reduced?"reduced":"normal").arg(pitch);
@@ -696,21 +849,44 @@ void slice_project(Project &p, std::atomic_bool *cancel, std::function<void(doub
     double low = *std::min_element(field.begin(), field.end()),
            high = *std::max_element(field.begin(), field.end());
     int layer = 0, region = 0;
-    for (double level = low + extrusion_height(p.process,0); level <= high + 1e-7;
+    double previousLevel=low;
+    for (double level = p.process.preciseZ?std::min(high,low + extrusion_height(p.process,0)):low+extrusion_height(p.process,0); level <= high + 1e-7;
          level += p.process.layerHeight, ++layer) {
+        if(level>high) break;
         if (cancel && cancel->load())
             throw std::runtime_error("Slicing cancelled");
         auto surface = iso_surface(p.volume, field, std::min(level, high - 1e-7));
         if (surface.mesh.empty())
             continue;
+        size_t begin=p.path.size();
         for (auto &island : decompose_surface(surface)) {
+            double nominalSpacing=bead_spacing(extrusion_width(p.process,Role::Brim,layer),extrusion_height(p.process,layer));
+            bool autoBrim=p.process.brimType==1 && p.part.bounds().sizes().z()>5*std::min(p.part.bounds().sizes().x(),p.part.bounds().sizes().y());
+            if(layer==0 && (p.process.brimType>1 || autoBrim)) {
+                int count=int(std::ceil(p.process.brimWidth/nominalSpacing));
+                int kind=p.process.brimType==3?2:p.process.brimType==4?0:1;
+                for(int i=0;i<count;++i) walls(p,island,layer,region,1,Role::Brim,1e-6,0,p.process.brimGap+(i+.5)*nominalSpacing,kind);
+            }
+            if(layer<p.process.skirtHeight) for(int i=0;i<p.process.skirtLoops;++i)
+                walls(p,island,layer,region,1,Role::Skirt,1e-6,0,p.process.skirtDistance+(i+.5)*nominalSpacing,1);
+            int topCount=std::max(p.process.topShellLayers,int(std::ceil(p.process.topThickness/p.process.layerHeight)));
+            int bottomCount=std::max(p.process.bottomShellLayers,int(std::ceil(p.process.bottomThickness/p.process.layerHeight)));
+            bool bottom=layer<bottomCount,top=topCount>0 && level+topCount*p.process.layerHeight>high+1e-7;
+            bool finalLayer=level+p.process.layerHeight>high+1e-7;
+            Role role=top && finalLayer?Role::TopSurface:bottom && layer==0?Role::BottomSurface:top || bottom?Role::SolidInfill:Role::Infill;
+            if(p.process.infillFirst) infill(p,island,layer,region,role);
             walls(p, island, layer, region);
-            bool solid=layer<p.process.bottomShellLayers ||
-                       (p.process.topShellLayers>0 && level+p.process.topShellLayers*p.process.layerHeight>high+1e-7);
-            infill(p, island, layer, region, solid);
+            if(!p.process.infillFirst) infill(p,island,layer,region,role);
         }
+        if(p.process.preciseZ && level-previousLevel<extrusion_height(p.process,layer)-1e-7) {
+            double actual=level-previousLevel;
+            for(size_t i=begin;i<p.path.size();++i) { auto &s=p.path[i]; if(s.deltaE>0) s.deltaE*=bead_area(s.width,actual)/bead_area(s.width,s.height); s.height=actual; }
+        }
+        previousLevel=level;
         if (progress)
             progress((level - low) / (high - low));
+        if(level>=high-1e-7) { ++layer; break; }
+        if(p.process.preciseZ && level+p.process.layerHeight>high) level=high-p.process.layerHeight;
     }
     if (p.path.size() < 2)
         throw std::runtime_error("No printable paths: increase meshing detail or reduce extrusion width");

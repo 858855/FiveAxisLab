@@ -55,7 +55,74 @@ class CoreTests : public QObject {
     void reduced_and_disabled_supports();
     void dummy_toolhead_roundtrip_and_collision();
     void toolpaths_follow_joint_motion();
+    void workspace_settings_geometry();
+    void workspace_preset_import();
+    void step_tessellation_options();
 };
+void CoreTests::workspace_preset_import() {
+    QStringList notes;
+    auto s=import_orca_process({{"top_surface_line_width","0.5"},{"support_line_width","0.6"},
+        {"top_surface_density","85%"},{"top_surface_pattern","concentric"},{"top_shell_thickness","0.8"},
+        {"alternate_extra_wall","1"},{"is_infill_first","1"},{"enable_overhang_speed","1"},{"initial_layer_infill_speed","55"},
+        {"top_surface_speed","150"},{"small_perimeter_speed","50%"},{"small_perimeter_threshold","10"},
+        {"xy_contour_compensation","0.1"},{"elefant_foot_compensation","0.15"},{"overhang_2_4_speed","50"},
+        {"support_threshold_angle","30"},{"skirt_loops","2"},{"brim_type","outer_only"},{"brim_width","3"}},ProcessSettings{},notes);
+    QCOMPARE(s.topWidth,.5); QCOMPARE(s.supportWidth,.6); QCOMPARE(s.topDensity,.85); QCOMPARE(s.topPattern,SurfacePattern::Concentric);
+    QCOMPARE(s.topThickness,.8); QVERIFY(s.alternateExtraWall && s.infillFirst && s.slowOverhangs); QCOMPARE(s.firstLayerInfillSpeed,55.0);
+    QCOMPARE(s.topSpeed,150.0); QCOMPARE(s.smallWallSpeed,.5); QCOMPARE(s.overhangSpeeds[1],50.0);
+    QVERIFY(std::abs(s.supportAngle-pi/6)<1e-9); QCOMPARE(s.skirtLoops,2); QCOMPARE(s.brimType,2);
+    QCOMPARE(process_json(read_process(process_json(s))),process_json(s));
+    auto absolute=import_orca_process({{"small_perimeter_speed","15"}},s,notes); QCOMPARE(absolute.smallWallAbsoluteSpeed,15.0);
+    auto j=process_json(s); j["layerHeight"]="bad"; QVERIFY_EXCEPTION_THROWN(read_process(j),std::runtime_error);
+    j=process_json(s); j["overhangSpeeds"]=QJsonArray{1,-1,2,3,4}; QVERIFY_EXCEPTION_THROWN(read_process(j),std::runtime_error);
+}
+void CoreTests::workspace_settings_geometry() {
+    try {
+    auto base=demo_project(); base.part=box_mesh(Vec3(0,0,1),Vec3(8,8,2)); base.volume={};
+    base.process.layerHeight=.4; base.process.firstLayerHeight=.2; base.process.width=.6; base.process.wallCount=1;
+    base.process.supportMode=SupportMode::None; base.process.curved=false; base.process.infill=.3;
+    slice_project(base);
+    auto extreme=[](const Project &p,int layer) { double v=-1e9; for(const auto &s:p.path) if(s.role==Role::OuterWall && s.deltaE>0 && s.layer==layer) v=std::max(v,s.position.x()); return v; };
+    auto compensated=base; compensated.process.contourCompensation=.15; compensated.process.elephantFoot=.05; slice_project(compensated);
+    QVERIFY(std::abs(extreme(compensated,1)-extreme(base,1)-.15)<.025);
+    QVERIFY(std::abs(extreme(compensated,0)-extreme(base,0)-.10)<.025);
+    auto precise=base; precise.process.preciseZ=true; slice_project(precise); double top=0,height=0;
+    for(const auto &s:precise.path) if(s.deltaE>0 && s.position.z()>top) {top=s.position.z();height=s.height;}
+    QVERIFY(std::abs(top-2)<1e-5); QVERIFY(std::abs(height-.2)<1e-5);
+    auto shell=base; shell.process.topThickness=.8; shell.process.topPattern=SurfacePattern::Concentric; shell.process.topWidth=.65; shell.process.topSpeed=17;
+    shell.process.infillFirst=true; shell.process.alternateExtraWall=true; slice_project(shell);
+    bool topFound=false,solidFound=false,extra=false; Role first=Role::Travel;
+    for(const auto &s:shell.path) if(s.deltaE>0) {
+        if(first==Role::Travel) first=s.role;
+        if(s.role==Role::TopSurface) {topFound=true; QCOMPARE(s.width,.65); QCOMPARE(s.speed,17.0);}
+        solidFound|=s.role==Role::SolidInfill; extra|=s.role==Role::Wall && s.layer%2==1;
+    }
+    QCOMPARE(first,Role::Infill); QVERIFY(topFound && solidFound && extra);
+    auto noTop=shell; noTop.process.topDensity=0; slice_project(noTop);
+    for(const auto &s:noTop.path) QVERIFY(s.role!=Role::TopSurface);
+    auto adhesion=base; adhesion.process.skirtLoops=2; adhesion.process.skirtDistance=2; adhesion.process.brimType=2; adhesion.process.brimWidth=1.2; adhesion.process.brimGap=.1;
+    slice_project(adhesion); double skirt=0,brim=0;
+    for(const auto &s:adhesion.path) {if(s.role==Role::Skirt) skirt+=s.deltaE; if(s.role==Role::Brim) brim+=s.deltaE;}
+    QVERIFY(skirt>0 && brim>0); QVERIFY(adhesion.deposition.checked);
+    auto slow=base; slow.process.smallWallThreshold=50; slow.process.smallWallSpeed=.5; slow.process.outerWallSpeed=20; slice_project(slow);
+    for(const auto &s:slow.path) if(s.role==Role::OuterWall && s.deltaE>0) QCOMPARE(s.speed,10.0);
+    QTemporaryDir dir; adhesion.filamentName="ASA"; adhesion.filamentDensity=1.07; adhesion.filamentCost=29;
+    auto fp=adhesion.fingerprint(); adhesion.filamentCost=39; QCOMPARE(adhesion.fingerprint(),fp);
+    save_project(adhesion,dir.filePath("settings.5axis")); auto restored=load_project(dir.filePath("settings.5axis"));
+    QCOMPARE(process_json(restored.process),process_json(adhesion.process)); QCOMPARE(restored.filamentName,QString("ASA")); QCOMPARE(restored.filamentCost,39.0);
+    } catch(const std::exception &e) { QFAIL(e.what()); }
+}
+void CoreTests::step_tessellation_options() {
+    QTemporaryDir dir; auto file=dir.filePath("fine.step"); write_demo_step(file,true,false,true);
+    StepImportOptions fine; fine.angularDeflection=.03; fine.splitCompounds=true;
+    auto a=load_step_assembly(file,fine); fine.angularDeflection=.6; fine.linearDeflection=.2; auto b=load_step_assembly(file,fine);
+    size_t fa=0,fb=0; for(const auto &c:a.components) {fa+=c.mesh.triangles.size();QCOMPARE(c.mesh.error,.02);}
+    for(const auto &c:b.components) {fb+=c.mesh.triangles.size();QCOMPARE(c.mesh.error,.2);}
+    QVERIFY(fa>fb); QCOMPARE(a.sourceHash,b.sourceHash); QCOMPARE(a.components.size(),b.components.size());
+    auto cached=load_step_assembly(file,fine); QCOMPARE(cached.components.front().mesh.triangles.size(),b.components.front().mesh.triangles.size());
+    fine.splitCompounds=false; auto whole=load_step_assembly(file,fine); QVERIFY(whole.components.size()<b.components.size());
+    fine.angularDeflection=0; QVERIFY_EXCEPTION_THROWN(load_step_assembly(file,fine),std::runtime_error);
+}
 void CoreTests::orca_process_import() {
     QStringList notes;
     auto s=import_orca_process({{"layer_height","0.2"},{"initial_layer_print_height","0.25"},
@@ -92,7 +159,7 @@ void CoreTests::process_roles_and_patterns() {
         if(s.role==Role::OuterWall) { QCOMPARE(s.width,.65); QCOMPARE(s.speed,19.0); outer=true; }
         if(s.role==Role::Wall) { QCOMPARE(s.width,.6); QCOMPARE(s.speed,27.0); inner=true; }
         if(s.role==Role::Infill) { QCOMPARE(s.width,.5); QCOMPARE(s.speed,33.0); infill=true; }
-        if(s.role==Role::SolidInfill) { QCOMPARE(s.width,.55); QCOMPARE(s.speed,21.0); solid=true; }
+        if(s.role==Role::SolidInfill || s.role==Role::TopSurface) { QCOMPARE(s.width,s.role==Role::TopSurface?.6:.55); QCOMPARE(s.speed,s.role==Role::TopSurface?25.0:21.0); solid=true; }
     }
     QCOMPARE(firstExtrusion,Role::Wall); QVERIFY(first && outer && inner && infill && solid);
     QVERIFY(p.deposition.checked);

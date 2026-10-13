@@ -274,7 +274,7 @@ QJsonObject project_json(const Project &p) {
                            {"unsupported", unsupported},
                            {"dependencies", dependencies}};
     return {{"schema", 1},
-            {"engineRevision", "0.2.0-process-toolpaths-2"},
+            {"engineRevision", "0.3.0-workspace-process-1"},
             {"deposition", deposition},
             {"part", mesh_json(p.part)},
             {"partPlacement", matrix(p.partPlacement)},
@@ -284,6 +284,7 @@ QJsonObject project_json(const Project &p) {
             {"useDummyToolhead", p.useDummyToolhead},
             {"machine", m},
             {"process", s},
+            {"filament",QJsonObject{{"name",p.filamentName},{"density",p.filamentDensity},{"cost",p.filamentCost}}},
             {"stress", stress},
             {"loads", loads},
             {"comparison", comparison},
@@ -346,6 +347,9 @@ Project project_from_json(const QJsonObject &j) {
         p.machine.maxFlow <= 0)
         throw std::runtime_error("Invalid machine configuration");
     p.process = read_process(j["process"].toObject());
+    auto filament=j["filament"].toObject(); p.filamentName=filament["name"].toString("Generic PLA");
+    p.filamentDensity=filament["density"].toDouble(1.24); p.filamentCost=filament["cost"].toDouble(25);
+    if(!std::isfinite(p.filamentDensity) || p.filamentDensity<=0 || !std::isfinite(p.filamentCost) || p.filamentCost<0) throw std::runtime_error("Invalid filament properties");
     p.pathProcessFingerprint = j["pathProcessFingerprint"].toString(process_fingerprint(p.process));
     p.toolhead = read_toolhead(j["toolhead"].toObject());
     p.useDummyToolhead = j["useDummyToolhead"].toBool();
@@ -363,7 +367,8 @@ Project project_from_json(const QJsonObject &j) {
         v.position = vec(a["position"]);
         v.direction = vec(a["direction"]);
         v.joint = read_joint(a["joint"].toObject());
-        v.role = Role(a["role"].toInt());
+        int role=a["role"].toInt(); if(role<0 || role>=role_count) throw std::runtime_error("Invalid path role");
+        v.role = Role(role);
         v.time = a["time"].toDouble();
         v.deltaE = a["deltaE"].toDouble();
         v.width = a["width"].toDouble();

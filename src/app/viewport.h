@@ -9,6 +9,9 @@
 #include <QPoint>
 #include <map>
 #include <set>
+#include <array>
+#include <limits>
+QColor toolpath_color(fiveaxis::Role role);
 class Viewport : public QOpenGLWidget, protected QOpenGLFunctions {
     Q_OBJECT
   public:
@@ -20,6 +23,12 @@ class Viewport : public QOpenGLWidget, protected QOpenGLFunctions {
     void set_path_mode(int mode) { pathMode = mode; update_path_legend(); update(); }
     void set_travel_paths(bool value) { travelPaths = value; update_path_legend(); update(); }
     void set_deposited_visible(bool value) { depositedVisible = value; update(); }
+    void set_prepare(bool value) { prepare=value; set_time(time); update_path_legend(); update(); }
+    void set_toolhead_visible(bool value) { toolheadVisible=value;update(); }
+    void set_layer_range(int low,int high) { firstLayer=low;lastLayer=high;update(); }
+    void set_role_visible(fiveaxis::Role role,bool value) { if(int(role)>=0 && int(role)<fiveaxis::role_count) visibleRoles[int(role)]=value;update(); }
+    int first_layer() const { return firstLayer; }
+    int last_layer() const { return lastLayer; }
     int path_mode() const { return pathMode; }
     size_t toolpath_segment_count() const { return pathSegments.size(); }
     void set_follow(bool v) {
@@ -60,6 +69,13 @@ class Viewport : public QOpenGLWidget, protected QOpenGLFunctions {
     bool validationCurrent = false;
     int pathMode = 0;
     bool travelPaths = true, depositedVisible = true;
+    bool prepare=false;
+    bool toolheadVisible=true;
+    int firstLayer=0,lastLayer=std::numeric_limits<int>::max();
+    std::array<bool,fiveaxis::role_count> visibleRoles;
+    struct BeadRange { int begin,end,layer; fiveaxis::Role role; };
+    std::vector<BeadRange> beadRanges;
+    std::vector<QVector3D> beadColors;
     std::vector<fiveaxis::ToolpathSegment> pathSegments;
     QOpenGLBuffer pathBuffer;
     bool pathsUploaded = false;
@@ -74,9 +90,9 @@ class Viewport : public QOpenGLWidget, protected QOpenGLFunctions {
     std::map<const fiveaxis::Mesh *, std::unique_ptr<RenderMesh>> cache;
     fiveaxis::Mesh beads, unitBox, fixedMesh, loadedMesh, marker;
     std::vector<int> beadEnds;
-    void draw_mesh(const fiveaxis::Mesh &, const fiveaxis::Transform &, QVector4D, int triangles = -1);
+    void draw_mesh(const fiveaxis::Mesh &, const fiveaxis::Transform &, QVector4D, int triangles = -1,int firstTriangle=0);
     void draw_paths(const fiveaxis::Transform &);
     void pick(QPoint);
-    QLabel *hud, *pathLegend;
+    QLabel *hud, *pathLegend, *axesLegend;
     void update_path_legend();
 };

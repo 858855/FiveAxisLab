@@ -9,4 +9,5 @@ void validate_process(const ProcessSettings &s);
 double extrusion_width(const ProcessSettings &s, Role role, int layer);
 double extrusion_height(const ProcessSettings &s, int layer);
 double process_speed(const ProcessSettings &s, Role role, int layer);
+int effective_walls(const ProcessSettings &s, int layer);
 } // namespace fiveaxis

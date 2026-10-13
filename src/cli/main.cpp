@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
             if(!file.open(QIODevice::ReadOnly)) throw std::runtime_error("Cannot open Orca process JSON");
             QJsonParseError error; auto doc=QJsonDocument::fromJson(file.readAll(),&error);
             if(error.error!=QJsonParseError::NoError || !doc.isObject()) throw std::runtime_error("Invalid Orca process JSON");
-            p.process=import_orca_process(doc.object(),p.process,presetNotes);
+            p.process=doc.object().contains("layerHeight")?read_process(doc.object()):import_orca_process(doc.object(),p.process,presetNotes);
         }
         if(parser.isSet("supports")) {
             auto value=parser.value("supports");
