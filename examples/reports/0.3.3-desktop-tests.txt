@@ -1,0 +1,15 @@
+********* Start testing of DesktopTests *********
+Config: Using QtTest library 6.11.2, Qt 6.11.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 16.2.0), windows 11
+PASS   : DesktopTests::initTestCase()
+PASS   : DesktopTests::cartesian_workspace()
+PASS   : DesktopTests::spiral_profile_preview(bed)
+PASS   : DesktopTests::spiral_profile_preview(head)
+PASS   : DesktopTests::rotary_axis_preview(rotary-bed)
+PASS   : DesktopTests::rotary_axis_preview(tilting-head)
+PASS   : DesktopTests::inline_workspace_and_layer_filters()
+PASS   : DesktopTests::step_parameters_preview()
+PASS   : DesktopTests::toolpaths_dummy_and_process_controls()
+PASS   : DesktopTests::playback_and_background_replay()
+PASS   : DesktopTests::cleanupTestCase()
+Totals: 11 passed, 0 failed, 0 skipped, 0 blacklisted, 7379ms
+********* Finished testing of DesktopTests *********

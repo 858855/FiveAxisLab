@@ -40,7 +40,7 @@ static Transform head_b(const MachineProfile &m, const JointState &q) {
     return translation(m.headPivotB) * rotation_y(q.b) * translation(-m.headPivotB);
 }
 Transform workpiece_pose(const MachineProfile &m, const JointState &q) {
-    if (m.layout == Layout::TiltingHead)
+    if (m.layout != Layout::RotaryBed)
         return Transform::Identity();
     return translation(m.bedPivot) * rotation_x(q.a) * rotation_z(q.b) * translation(-m.bedPivot);
 }
@@ -62,11 +62,13 @@ Vec3 part_position(const MachineProfile &m, const JointState &q) {
 }
 Vec3 part_direction(const MachineProfile &m, const ToolheadAssembly &t, const JointState &q) {
     Vec3 axis = (t.mount.linear() * t.axis).normalized();
+    if(!m.rotary_axes())return axis;
     if (m.layout == Layout::RotaryBed)
         return workpiece_pose(m, q).linear().transpose() * axis;
     return (head_a(m, q) * head_b(m, q)).linear() * axis;
 }
 bool in_limits(const MachineProfile &m, const JointState &q) {
+    if(!m.rotary_axes())return q.xyz.allFinite() && (q.xyz.array()>=m.minXYZ.array()-1e-8).all() && (q.xyz.array()<=m.maxXYZ.array()+1e-8).all() && std::isfinite(q.a) && std::isfinite(q.b) && std::abs(q.a)<1e-10 && std::abs(q.b)<1e-10;
     return q.xyz.allFinite() && (q.xyz.array() >= m.minXYZ.array() - 1e-8).all() &&
            (q.xyz.array() <= m.maxXYZ.array() + 1e-8).all() && std::isfinite(q.a) && std::isfinite(q.b) &&
            q.a >= m.minA - 1e-8 && q.a <= m.maxA + 1e-8 && q.b >= m.minB - 1e-8 && q.b <= m.maxB + 1e-8;
@@ -98,6 +100,11 @@ std::vector<JointState> inverse_kinematics(const MachineProfile &m, const Vec3 &
         throw std::runtime_error("Invalid target pose");
     Vec3 n = normal.normalized();
     std::vector<JointState> result;
+    if(!m.rotary_axes()) {
+        Vec3 axis=(t.mount.linear()*t.axis).normalized();
+        if((axis-Vec3::UnitZ()).norm()>1e-6 || (n-axis).norm()>1e-6)return result;
+        JointState q;q.xyz=p;if(in_limits(m,t,q))result.push_back(q);return result;
+    }
     std::vector<std::pair<double, double>> branches;
     Vec3 mounted=(t.mount.linear()*t.axis).normalized();
     if((mounted-Vec3::UnitZ()).norm()>1e-10) {
@@ -163,6 +170,7 @@ JointState interpolate(const JointState &a, const JointState &b, double u) {
 }
 double movement_bound(const MachineProfile &m, const ToolheadAssembly &t, const JointState &a,
                       const JointState &b, double radius) {
+    if(!m.rotary_axes())return (b.xyz-a.xyz).norm();
     const double rotation = std::abs(b.a - a.a) + std::abs(b.b - a.b);
     if (m.layout == Layout::RotaryBed) {
         double lever = radius + std::max((a.xyz - m.bedPivot).norm(), (b.xyz - m.bedPivot).norm());
@@ -194,6 +202,10 @@ QString role_name(Role r) {
         return "Travel";
     }
 }
+QString layout_name(Layout layout) {
+    return layout==Layout::RotaryBed?"Rotary bed":layout==Layout::TiltingHead?"Tilting head":"Standard XYZ · fixed nozzle";
+}
+Vec3 surface_normal(const Sample &sample) {return sample.surfaceNormal.value_or(sample.direction);}
 void Project::invalidate() {
     report = CollisionReport{};
     depositionValid = false;

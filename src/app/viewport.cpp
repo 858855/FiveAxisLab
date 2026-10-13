@@ -120,7 +120,7 @@ void Viewport::set_project(const Project *p) {
                 Vec3 delta = b.position - a.position;
                 if (delta.norm() > 1e-8) {
                     int first=int(beads.triangles.size());
-                    Vec3 n = (a.direction + b.direction).normalized(), tangent = delta.normalized(),
+                    Vec3 n = (surface_normal(a)+surface_normal(b)).normalized(), tangent = delta.normalized(),
                          side = n.cross(tangent);
                     if (side.norm() < 1e-6)
                         side = tangent.unitOrthogonal();
@@ -163,7 +163,7 @@ void Viewport::set_time(double t) {
         }
         hud->setText(QString("SIMULATION · %1\nMove %2 / %3 · %4 s\nCarriage XYZ %5, %6, %7 mm · A %8° · %9 "
                              "%10°\nFlow %11 mm³/s · Minimum clearance %12 mm\n%13")
-                         .arg(project->machine.layout == Layout::RotaryBed ? "Rotary bed" : "Tilting head")
+                         .arg(layout_name(project->machine.layout))
                          .arg(state.move)
                          .arg(project->path.size())
                          .arg(state.time, 0, 'f', 1)
@@ -182,6 +182,9 @@ void Viewport::set_time(double t) {
                                   ? "Collision detected · export blocked"
                                   : "Validation pending / unresolved"));
         if(project->useDummyToolhead) hud->setText(hud->text()+"\nDUMMY TOOLHEAD · synthetic geometry only");
+        if(!project->machine.rotary_axes())hud->setText(QString("STANDARD XYZ · %1\nMove %2 / %3 · %4 s\nCarriage XYZ %5, %6, %7 mm\nNozzle fixed +Z · no rotary axes\nFlow %8 mm³/s · %9")
+            .arg(project->process.nonPlanar3Axis?"NON-PLANAR":"PLANAR").arg(state.move).arg(project->path.size()).arg(state.time,0,'f',1)
+            .arg(axes.xyz.x(),0,'f',2).arg(axes.xyz.y(),0,'f',2).arg(axes.xyz.z(),0,'f',2).arg(flow,0,'f',2).arg(validationCurrent?"Geometry checked":"Validation pending / export blocked"));
         if(project->process.profileNormal && !project->profileGuide.empty() && !project->path.empty()) {
             const auto &sample=project->path[std::clamp(state.move,0,int(project->path.size())-1)];
             auto normal=profile_layer(*project,sample.layer).normal;
@@ -243,7 +246,7 @@ void Viewport::fit() {
         auto pose=component_pose(project->machine,project->active_toolhead(),c,state.joint);
         for(auto& v:c.mesh.vertices)b.extend(pose*v);
     }
-    if(!prepare && rotaryAxesVisible) {
+    if(!prepare && rotaryAxesVisible && project->machine.rotary_axes()) {
         double extent=(project->machine.layout==Layout::RotaryBed?30:12)*1.4;
         for(const auto &frame:rotary_axis_frames(project->machine,project->active_toolhead(),state.joint)) {
             b.extend(frame.translation()-Vec3::Constant(extent));
@@ -402,7 +405,7 @@ void Viewport::paintGL() {
         auto &b = project->path[state.move];
         Vec3 endpoint = part_position(project->machine, state.joint), delta = endpoint - a.position;
         if (delta.norm() > 1e-8) {
-            Vec3 n = (a.direction + b.direction).normalized(), tangent = delta.normalized(),
+            Vec3 n = (surface_normal(a)+surface_normal(b)).normalized(), tangent = delta.normalized(),
                  side = n.cross(tangent);
             if (side.norm() < 1e-6)
                 side = tangent.unitOrthogonal();
@@ -461,7 +464,7 @@ void Viewport::paintGL() {
 }
 void Viewport::draw_rotary_axes(){
     for(auto label:rotaryLabels)label->hide();
-    if(!project || prepare || !rotaryAxesVisible)return;
+    if(!project || prepare || !rotaryAxesVisible || !project->machine.rotary_axes())return;
     auto frames=rotary_axis_frames(project->machine,project->active_toolhead(),state.joint);
     double radius=project->machine.layout==Layout::RotaryBed?30:12;
     const QVector4D colors[]={QVector4D(.9,.2,.3,1),QVector4D(.08,.55,.82,1)};

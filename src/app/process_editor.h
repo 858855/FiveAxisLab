@@ -12,6 +12,7 @@ class ProcessEditor : public QWidget {
   public:
     explicit ProcessEditor(QWidget *parent=nullptr);
     void set_settings(const fiveaxis::ProcessSettings &settings);
+    void set_layout(fiveaxis::Layout layout);
     fiveaxis::ProcessSettings settings() const;
     bool valid() const { return error.isEmpty(); }
     QString validation_error() const { return error; }

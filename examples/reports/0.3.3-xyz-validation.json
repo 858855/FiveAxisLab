@@ -1,0 +1,17 @@
+{
+  "status": 2,
+  "completed": false,
+  "reason": "Full-job collision validation canceled before completion; the default XYZ fixture has no complete collision certificate.",
+  "modeledComponents": [
+    "Dummy nozzle [dummy-nozzle]",
+    "Dummy heat break [dummy-break]",
+    "Dummy heater block [dummy-heater]",
+    "Dummy fan shroud [dummy-fan]",
+    "Bed"
+  ],
+  "exportable": false,
+  "depositionCoverage": 1,
+  "depositionViolations": 0,
+  "nativeFirmwareValidated": false,
+  "physicalPrintingValidated": false
+}

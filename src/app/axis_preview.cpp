@@ -37,6 +37,7 @@ AxisPreview::AxisPreview(QWidget *parent):QGroupBox("Axis behavior",parent) {
 void AxisPreview::set_project(const Project *p,const JointState &q) {
     pause();project=p;updating=true;
     if(p){
+        bool rotary=p->machine.rotary_axes();source->setEnabled(rotary);setVisible(rotary);
         labelA->setText(p->machine.layout==Layout::RotaryBed?"A · tilt":"A · roll");labelB->setText(p->machine.axis2()+(p->machine.layout==Layout::RotaryBed?" · rotation":" · tilt"));
         a->setRange(p->machine.minA*180/pi,p->machine.maxA*180/pi);b->setRange(p->machine.minB*180/pi,p->machine.maxB*180/pi);
         sliderA->setRange(int(std::ceil(p->machine.minA*1800/pi)),int(std::floor(p->machine.maxA*1800/pi)));
@@ -58,6 +59,7 @@ void AxisPreview::pause(){animate->setChecked(false);timer.stop();}
 void AxisPreview::toggle_animation(){animate->setChecked(!animate->isChecked());}
 void AxisPreview::change_source(int index) {
     if(!project)return;
+    if(!project->machine.rotary_axes()){follow_motion(recorded);return;}
     if(index==0){follow_motion(recorded);return;}
     if(index==1){pause();apply_pose();return;}
     phase=0;apply_pose();animate->setChecked(true);

@@ -1,6 +1,7 @@
 #include "collision.h"
 #include "process.h"
 #include "profile.h"
+#include "nonplanar.h"
 #include "geometry.h"
 #include "slicing.h"
 #include "stress.h"
@@ -401,7 +402,7 @@ CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, c
             const Impl::Interface *rule = found == impl->interfaces.end() ? nullptr : &found->second;
             auto &a = impl->tools[rule ? rule->first : i];
             auto &b = impl->tools[rule ? rule->second : j];
-            if (a.component->link == b.component->link || p.machine.layout == Layout::RotaryBed)
+            if (a.component->link == b.component->link || p.machine.layout != Layout::TiltingHead)
                 continue;
             Transform ta = component_pose(p.machine, p.active_toolhead(), *a.component, q),
                       tb = component_pose(p.machine, p.active_toolhead(), *b.component, q);
@@ -531,6 +532,9 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
     CollisionReport r;
     r.fingerprint = p.fingerprint();
     r.status = Status::Clear;
+    if((p.machine.controller==Controller::GenericMarlin && p.machine.rotary_axes()) || (p.process.nonPlanar3Axis && p.machine.rotary_axes()) || (!p.machine.rotary_axes() && cartesian_motion_violation(p)>=0)) {
+        r.status=Status::Unresolved;r.events.push_back({Status::Unresolved,"Machine mode","Motion constraints","Standard XYZ output requires zero rotary motion, an upright nozzle and allowed non-planar slopes"});return r;
+    }
     if(p.process.profileNormal) {
         try {
             int move=profile_motion_violation(p);
@@ -642,9 +646,7 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
                 scene.check_interval(x, y, b.deltaE > 0, pa, pb, int(i), a.time + (b.time - a.time) * u,
                                      a.time + (b.time - a.time) * v, r, cancel);
             if (b.deltaE > 0)
-                scene.deposit(pa, pb, b.width, b.height, b.role,
-                              part_direction(p.machine, p.active_toolhead(),
-                                             interpolate_motion(p.machine, p.active_toolhead(), x, y, .5)));
+                scene.deposit(pa,pb,b.width,b.height,b.role,p.machine.rotary_axes()?part_direction(p.machine,p.active_toolhead(),interpolate_motion(p.machine,p.active_toolhead(),x,y,.5)):(surface_normal(a)*(1-(u+v)/2)+surface_normal(b)*((u+v)/2)).normalized());
             if (r.events.size() > 200 || r.status == Status::Cancelled)
                 break;
         }
@@ -723,7 +725,7 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
             Vec3 x = original.unitOrthogonal(), y = original.cross(x);
             for (int cone = 0; cone <= 2 && !good && trials < 256; ++cone)
                 for (int angle = 0; angle < 12 && !good && trials < 256; ++angle) {
-                    double tilt = p.process.profileNormal?0:cone * p.process.directionCone / 2, az = angle * 2 * pi / 12;
+                    double tilt = p.process.profileNormal || !p.machine.rotary_axes()?0:cone * p.process.directionCone / 2, az = angle * 2 * pi / 12;
                     Vec3 n =
                         (original * std::cos(tilt) + (x * std::cos(az) + y * std::sin(az)) * std::sin(tilt))
                             .normalized();
@@ -748,16 +750,14 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
         if (!good && target.deltaE <= 0) {
             namespace ob = ompl::base;
             namespace og = ompl::geometric;
-            auto space = std::make_shared<ob::RealVectorStateSpace>(5);
-            ob::RealVectorBounds bounds(5);
+            int dimensions=p.machine.rotary_axes()?5:3;
+            auto space = std::make_shared<ob::RealVectorStateSpace>(dimensions);
+            ob::RealVectorBounds bounds(dimensions);
             for (int k = 0; k < 3; ++k) {
                 bounds.setLow(k, p.machine.minXYZ[k]);
                 bounds.setHigh(k, p.machine.maxXYZ[k]);
             }
-            bounds.setLow(3, p.machine.minA);
-            bounds.setHigh(3, p.machine.maxA);
-            bounds.setLow(4, p.machine.minB);
-            bounds.setHigh(4, p.machine.maxB);
+            if(p.machine.rotary_axes()){bounds.setLow(3,p.machine.minA);bounds.setHigh(3,p.machine.maxA);bounds.setLow(4,p.machine.minB);bounds.setHigh(4,p.machine.maxB);}
             space->setBounds(bounds);
             space->setStateSamplerAllocator(
                 [](const ob::StateSpace *s) { return std::make_shared<SeededSampler>(s); });
@@ -766,8 +766,8 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
                 auto s = state->as<ob::RealVectorStateSpace::StateType>();
                 JointState q;
                 q.xyz = Vec3(s->values[0], s->values[1], s->values[2]);
-                q.a = s->values[3];
-                q.b = s->values[4];
+                q.a = p.machine.rotary_axes()?s->values[3]:0;
+                q.b = p.machine.rotary_axes()?s->values[4]:0;
                 return pose_from_axes(p.machine, p.active_toolhead(), q);
             };
             setup.setStateValidityChecker([&](const ob::State *state) {
@@ -780,10 +780,7 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
                 start[k] = controller_axes(p.machine, p.active_toolhead(), previous.joint).xyz[k];
                 goal[k] = controller_axes(p.machine, p.active_toolhead(), target.joint).xyz[k];
             }
-            start[3] = previous.joint.a;
-            start[4] = previous.joint.b;
-            goal[3] = target.joint.a;
-            goal[4] = target.joint.b;
+            if(p.machine.rotary_axes()){start[3]=previous.joint.a;start[4]=previous.joint.b;goal[3]=target.joint.a;goal[4]=target.joint.b;}
             setup.setStartAndGoalStates(start, goal);
             setup.setPlanner(std::make_shared<SeededConnect>(setup.getSpaceInformation()));
             int budget = 0;
@@ -822,7 +819,7 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
         }
         if (target.deltaE > 0)
             scene.deposit(previous.position, target.position, target.width, target.height, target.role,
-                          (previous.direction + target.direction).normalized());
+                          (surface_normal(previous)+surface_normal(target)).normalized());
     }
     if (changed)
         refine_joint_motion(p);
@@ -842,7 +839,7 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
     }
     p.report = validate_motion(p, cancel);
     // One bounded retry changes the orientation of the affected curve as a region.
-    if (!p.process.profileNormal && !p.report.exportable() && !p.report.events.empty() && !(cancel && cancel->load())) {
+    if (p.machine.rotary_axes() && !p.process.profileNormal && !p.report.exportable() && !p.report.events.empty() && !(cancel && cancel->load())) {
         auto event = p.report.events.front();
         if (event.move > 0 && event.move < int(p.path.size()) && p.path[event.move].deltaE > 0) {
             Project candidate = p;

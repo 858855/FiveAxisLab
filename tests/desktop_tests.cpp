@@ -6,6 +6,7 @@
 #include "core/motion_preview.h"
 #include "core/profile.h"
 #include "core/slicing.h"
+#include "core/nonplanar.h"
 #include "core/collision.h"
 #include <QPushButton>
 #include <QDialog>
@@ -21,6 +22,19 @@ using namespace fiveaxis;
 class DesktopTests : public QObject {
     Q_OBJECT
   private Q_SLOTS:
+    void cartesian_workspace(){
+        auto p=nonplanar_cartesian_project();p.process.layerHeight=.6;p.process.width=.8;p.process.wallCount=1;p.process.infill=.2;try{slice_project(p);}catch(const std::exception &e){QFAIL(e.what());}
+        QTemporaryDir dir;auto file=dir.filePath("xyz.5axis");save_project(p,file);MainWindow window;window.load(file);window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto layout=window.findChild<QComboBox*>("machineLayout"),controller=window.findChild<QComboBox*>("machineController"),axes=window.findChild<QComboBox*>("axisPreviewSource");
+        auto enabled=window.findChild<QCheckBox*>("nonPlanar3Axis");QVERIFY(enabled && enabled->isChecked());QCOMPARE(layout->currentIndex(),2);QCOMPARE(controller->currentIndex(),2);QVERIFY(!axes->isEnabled());
+        auto tabs=window.findChild<QTabWidget*>("processTabs");tabs->setCurrentIndex(1);QVERIFY(!window.findChild<QCheckBox*>("profileNormal")->isEnabled());
+        auto slider=window.findChild<QSlider*>("moveTimeline");slider->setValue(6500);auto view=window.findChild<Viewport*>("simulationViewport");QVERIFY(std::abs(view->displayed_joint().a)+std::abs(view->displayed_joint().b)<1e-12);
+        QVERIFY(window.findChild<QLabel*>("simulationHud")->text().contains("Nozzle fixed +Z"));auto code=window.findChild<QTextEdit*>("moveCodePreview")->toPlainText();QVERIFY(!QRegularExpression("[ABC]\\s*[-+0-9]").match(code).hasMatch());
+        auto fingerprint=window.current_project().fingerprint();slider->setValue(1500);slider->setValue(6500);QCOMPARE(window.current_project().fingerprint(),fingerprint);
+        auto shots=qEnvironmentVariable("FIVEAXIS_XYZ_SCREENSHOTS");if(!shots.isEmpty()){window.capture(shots+"/nonplanar-xyz-preview.png");}
+        layout->setCurrentIndex(0);QVERIFY(window.current_project().path.empty());QVERIFY(!window.current_project().process.nonPlanar3Axis);QCOMPARE(window.current_project().machine.controller,Controller::Duet);
+        layout->setCurrentIndex(2);QVERIFY(window.current_project().process.nonPlanar3Axis);QVERIFY(!window.findChild<QPushButton*>("exportGcode")->isEnabled());window.close();
+    }
     void spiral_profile_preview_data(){QTest::addColumn<bool>("head");QTest::newRow("bed")<<false;QTest::newRow("head")<<true;}
     void spiral_profile_preview(){
         QFETCH(bool,head);auto p=spiral_profile_project(head?Layout::TiltingHead:Layout::RotaryBed);p.process.layerHeight=1.5;p.process.width=1.6;p.process.wallCount=1;p.process.infill=.2;try{slice_project(p);}catch(const std::exception &e){QFAIL(e.what());}

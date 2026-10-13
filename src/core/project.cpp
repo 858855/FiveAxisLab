@@ -206,8 +206,8 @@ QJsonObject project_json(const Project &p) {
                                     {"mesh", mesh_json(f.mesh)},
                                     {"movesWithBed", f.movesWithBed},
                                     {"sourceStep", QString::fromLatin1(f.sourceStep.toBase64())}});
-    for (auto &x : p.path)
-        path.append(QJsonObject{{"position", vec(x.position)},
+    for (auto &x : p.path) {
+        QJsonObject entry{{"position", vec(x.position)},
                                 {"direction", vec(x.direction)},
                                 {"joint", joint_json(x.joint)},
                                 {"role", int(x.role)},
@@ -217,7 +217,9 @@ QJsonObject project_json(const Project &p) {
                                 {"height", x.height},
                                 {"speed", x.speed},
                                 {"layer", x.layer},
-                                {"region", x.region}});
+                                {"region", x.region}};
+        if(x.surfaceNormal)entry["surfaceNormal"]=vec(*x.surfaceNormal);path.append(entry);
+    }
     for (auto &t : p.stress.tensors) {
         QJsonArray a;
         for (int i = 0; i < 3; ++i)
@@ -275,7 +277,7 @@ QJsonObject project_json(const Project &p) {
                            {"unsupported", unsupported},
                            {"dependencies", dependencies}};
     QJsonObject result{{"schema", 1},
-            {"engineRevision", p.process.profileNormal?"0.3.2-profile-normal-1":"0.3.0-workspace-process-1"},
+            {"engineRevision", !p.machine.rotary_axes()?"0.3.3-cartesian-nonplanar-1":p.process.profileNormal?"0.3.2-profile-normal-1":"0.3.0-workspace-process-1"},
             {"deposition", deposition},
             {"part", mesh_json(p.part)},
             {"partPlacement", matrix(p.partPlacement)},
@@ -327,6 +329,7 @@ Project project_from_json(const QJsonObject &j) {
     auto m = j["machine"].toObject();
     p.machine.layout = Layout(m["layout"].toInt());
     p.machine.controller = Controller(m["controller"].toInt());
+    if(int(p.machine.layout)<0 || int(p.machine.layout)>2 || int(p.machine.controller)<0 || int(p.machine.controller)>2)throw std::runtime_error("Unsupported saved machine layout or controller");
     p.machine.bedPivot = vec(m["bedPivot"]);
     p.machine.headPivotA = vec(m["headPivotA"]);
     p.machine.headPivotB = vec(m["headPivotB"]);
@@ -376,6 +379,7 @@ Project project_from_json(const QJsonObject &j) {
         Sample v;
         v.position = vec(a["position"]);
         v.direction = vec(a["direction"]);
+        if(a.contains("surfaceNormal")){v.surfaceNormal=vec(a["surfaceNormal"]);if(std::abs(v.surfaceNormal->norm()-1)>1e-6)throw std::runtime_error("Invalid saved surface normal");}
         v.joint = read_joint(a["joint"].toObject());
         int role=a["role"].toInt(); if(role<0 || role>=role_count) throw std::runtime_error("Invalid path role");
         v.role = Role(role);

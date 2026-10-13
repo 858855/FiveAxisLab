@@ -13,6 +13,9 @@ QString process_fingerprint(const ProcessSettings &s) {
 QJsonObject process_json(const ProcessSettings &s) {
     QJsonObject j;
     if(s.profileNormal)j["profileNormal"]=true;
+    if(s.nonPlanar3Axis || s.nonPlanarBase!=2 || std::abs(s.nonPlanarSlope-20*pi/180)>1e-12) {
+        j["nonPlanar3Axis"]=s.nonPlanar3Axis;j["nonPlanarBase"]=s.nonPlanarBase;j["nonPlanarSlope"]=s.nonPlanarSlope;
+    }
 #define FIELD(name) j[#name] = s.name
     FIELD(layerHeight); FIELD(width); FIELD(infill); FIELD(speed); FIELD(directionCone); FIELD(maximumTilt);
     FIELD(curved); FIELD(supports); FIELD(wallCount); FIELD(maximumBridge); FIELD(nozzleDiameter);
@@ -52,10 +55,13 @@ ProcessSettings read_process(const QJsonObject &j) {
     NUMBER(firstLayerInfillSpeed); NUMBER(topSpeed); NUMBER(smallWallSpeed); NUMBER(smallWallThreshold);
     NUMBER(smallWallAbsoluteSpeed);
     NUMBER(supportAngle); NUMBER(skirtDistance); NUMBER(brimWidth); NUMBER(brimGap);
+    NUMBER(nonPlanarBase); NUMBER(nonPlanarSlope);
 #undef NUMBER
     s.curved = j["curved"].toBool(s.curved); s.supports = j["supports"].toBool(s.supports);
     if(j.contains("profileNormal") && !j["profileNormal"].isBool())throw std::runtime_error("Invalid profileNormal setting");
     s.profileNormal=j["profileNormal"].toBool();
+    if(j.contains("nonPlanar3Axis") && !j["nonPlanar3Axis"].isBool())throw std::runtime_error("Invalid nonPlanar3Axis setting");
+    s.nonPlanar3Axis=j["nonPlanar3Axis"].toBool();
     s.wallCount = j["wallCount"].toInt(s.wallCount);
     s.topShellLayers = j["topShellLayers"].toInt(s.topShellLayers);
     s.bottomShellLayers = j["bottomShellLayers"].toInt(s.bottomShellLayers);
@@ -92,6 +98,7 @@ double process_speed(const ProcessSettings &s, Role role, int layer) {
 }
 int effective_walls(const ProcessSettings &s,int layer) { return s.wallCount+(s.alternateExtraWall && layer%2==1 ? 1 : 0); }
 void validate_process(const ProcessSettings &s) {
+    if(!std::isfinite(s.nonPlanarBase) || !std::isfinite(s.nonPlanarSlope) || s.nonPlanarBase<0 || s.nonPlanarSlope<=0 || s.nonPlanarSlope>=pi/2 || (s.profileNormal && s.nonPlanar3Axis))throw std::runtime_error("Invalid or conflicting three-axis non-planar settings");
     for (auto value : process_json(s))
         if (value.isDouble() && !std::isfinite(value.toDouble())) throw std::runtime_error("Non-finite process setting");
     if (s.layerHeight <= 0 || s.nozzleDiameter <= 0 || s.width < s.layerHeight || s.infill < 0 || s.infill > 1 ||

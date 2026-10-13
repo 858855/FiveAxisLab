@@ -13,7 +13,7 @@ using namespace fiveaxis;
 void MainWindow::process_settings() {
     if(worker.isRunning()) return;
     QDialog dialog(this); dialog.setObjectName("processSettingsDialog"); dialog.setWindowTitle("Print process · Orca options"); dialog.resize(640,850);
-    auto outer=new QVBoxLayout(&dialog); auto editor=new ProcessEditor; editor->set_settings(project.process); outer->addWidget(editor,1);
+    auto outer=new QVBoxLayout(&dialog); auto editor=new ProcessEditor; editor->set_settings(project.process);editor->set_layout(project.machine.layout); outer->addWidget(editor,1);
     auto error=new QLabel; error->setWordWrap(true); error->setStyleSheet("color:#bc3030;"); outer->addWidget(error);
     auto buttons=new QDialogButtonBox(QDialogButtonBox::Ok|QDialogButtonBox::Cancel); outer->addWidget(buttons);
     connect(editor,&ProcessEditor::edited,&dialog,[&]{error->setText(editor->validation_error());buttons->button(QDialogButtonBox::Ok)->setEnabled(editor->valid());});

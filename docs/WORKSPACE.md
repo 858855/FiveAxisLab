@@ -32,6 +32,8 @@ These fields record the requested UI inventory. They are not implemented algorit
 
 ## Preview and evidence
 
+Version 0.3.3 adds the **Standard XYZ · 3-axis** layout and **Strength → Standard XYZ · non-planar** settings. Rotary controls are disabled; curved-layer surface normals remain distinct from the fixed nozzle axis. [Standard-printer workflow](THREE_AXIS_NONPLANAR.md).
+
 Version 0.3.2 adds **Strength → Nozzle perpendicular to profile**, **Process → Import profile centerline guide JSON** and **Simulation → Open spiral five-axis test**. The active cross-section and nozzle-normal error appear in Preview. [Generation behavior and limits](PROFILE_NORMAL.md).
 
 Version 0.3.1 adds the **Axis behavior** inspector: recorded motion, manual poses and animated tilt/roll, with calibrated rotary-axis markers. Manual/animated inspection freezes deposition, leaves planned data unchanged and blocks export. [Controls, layouts and demonstration projects](AXIS_PREVIEW.md).

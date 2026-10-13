@@ -1,0 +1,13 @@
+{
+  "version": "0.3.3",
+  "sdkOnPath": false,
+  "portableCliExitCode": 0,
+  "referenceGeometricStatus": 0,
+  "referenceControllerSemanticReplayValidated": true,
+  "portableXyzGuiCapturePassed": true,
+  "initialManifestFilesVerified": 676,
+  "zipCrcPassed": true,
+  "fullXyzJobCollisionCertificate": false,
+  "nativeFirmwareValidated": false,
+  "physicalPrintingValidated": false
+}

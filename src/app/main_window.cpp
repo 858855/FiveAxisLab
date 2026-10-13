@@ -6,6 +6,7 @@
 #include "core/process.h"
 #include "core/motion_preview.h"
 #include "core/profile.h"
+#include "core/nonplanar.h"
 #include "core/slicing.h"
 #include "core/step_import.h"
 #include "core/stress.h"
@@ -30,6 +31,7 @@
 #include <QRegularExpression>
 #include <QScrollArea>
 #include <QSet>
+#include <QStandardItemModel>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QStatusBar>
@@ -118,9 +120,9 @@ MainWindow::MainWindow() : project(demo_project()) {
     vertical->addWidget(navigation);
     auto body=new QHBoxLayout; body->setContentsMargins(0,0,0,0); body->setSpacing(1); vertical->addLayout(body,1);
     auto panel = new QWidget; panel->setFixedWidth(390); auto left=new QVBoxLayout(panel); left->setContentsMargins(7,5,7,5); left->setSpacing(5); body->addWidget(panel);
-    auto machineGroup=new QGroupBox("Printer · five-axis machine"); auto mf=new QFormLayout(machineGroup); mf->setContentsMargins(7,12,7,5);
-    controller=new QComboBox; controller->addItems({"Duet / RepRapFirmware","Klipper"});
-    layout=new QComboBox; layout->addItems({"Tilting and rotating bed","Tilting toolhead"});
+    auto machineGroup=new QGroupBox("Printer · machine"); auto mf=new QFormLayout(machineGroup); mf->setContentsMargins(7,12,7,5);
+    controller=new QComboBox;controller->setObjectName("machineController"); controller->addItems({"Duet / RepRapFirmware","Klipper","Generic / Marlin · XYZ"});
+    layout=new QComboBox;layout->setObjectName("machineLayout"); layout->addItems({"Tilting and rotating bed","Tilting toolhead","Standard XYZ · 3-axis"});
     extension=new QCheckBox("Rotary-aware flow extension"); extension->setChecked(true);
     dummyToolhead=new QCheckBox("Generate with dummy toolhead"); dummyToolhead->setObjectName("dummyToolhead");
     dummyToolhead->setToolTip("Use a synthetic nozzle, heat break, heater block and fan shroud. The imported STEP assembly is retained.");
@@ -273,13 +275,14 @@ MainWindow::MainWindow() : project(demo_project()) {
     auto processMenu=menuBar()->addMenu("Process");
     processMenu->addAction("Process settings · Orca options",this,&MainWindow::process_settings);
     processMenu->addAction("Import Orca / FiveAxisLab process JSON",this,&MainWindow::import_orca_settings);
-    processMenu->addAction("Import profile centerline guide JSON…",this,[this]{
+    auto guideAction=processMenu->addAction("Import profile centerline guide JSON…",this,[this]{
         if(worker.isRunning())return;
         auto file=QFileDialog::getOpenFileName(this,"Profile centerline and normals · source model millimetres",{},"Profile guide (*.json)");
         if(file.isEmpty())return;
         try{project.profileGuide=import_profile_guide(file,project.partPlacement);project.process.profileNormal=true;project.invalidate();replaying=false;refresh();log->append("Profile guide loaded. Slice again to generate perpendicular nozzle motion.");}
         catch(const std::exception &e){show_error(e.what());}
     });
+    guideAction->setObjectName("importProfileGuide");
     auto machineMenu=menuBar()->addMenu("Machine"); machineMenu->addAction("Setup / toolhead calibration",this,&MainWindow::machine_setup);
     machineMenu->addAction("Bed, fixtures and machine bodies",this,&MainWindow::machine_obstacles);
     auto simulationMenu=menuBar()->addMenu("Simulation"); simulationMenu->addAction("Try collision avoidance",this,[this]{run("Repair");});
@@ -302,6 +305,12 @@ MainWindow::MainWindow() : project(demo_project()) {
     };
     simulationMenu->addAction("Open spiral five-axis test · rotary bed",this,[spiralDemo]{spiralDemo(Layout::RotaryBed);});
     simulationMenu->addAction("Open spiral five-axis test · tilting head",this,[spiralDemo]{spiralDemo(Layout::TiltingHead);});
+    auto xyzDemo=simulationMenu->addAction("Open 3-axis non-planar test",this,[this]{
+        if(worker.isRunning())return;
+        playing=false;replaying=false;time=0;project=nonplanar_cartesian_project();fixedFaces.clear();forceFaces.clear();
+        refresh();set_workspace(1);viewport->fit();
+        execute("Generate XYZ non-planar test",[](Project &p,std::atomic_bool *cancel){slice_project(p,cancel);p.report=CollisionReport{};p.diagnostics<<"Standard XYZ non-planar paths generated. Validate collisions before export.";});
+    });xyzDemo->setObjectName("openCartesianDemo");
     auto view = menuBar()->addMenu("View");
     view->addAction("Fit geometry", viewport, &Viewport::fit);
     view->addAction("Save preview image…", this, [this] {
@@ -375,9 +384,12 @@ MainWindow::MainWindow() : project(demo_project()) {
             run("Regenerate");
     });
     connect(layout, &QComboBox::currentIndexChanged, this, [this](int index) {
+        bool reslice=project.machine.layout==Layout::Cartesian3Axis || index==int(Layout::Cartesian3Axis);
         project.machine.layout = Layout(index);
-        project.machine.minB = index ? -75 * pi / 180 : -pi;
-        project.machine.maxB = index ? 75 * pi / 180 : pi;
+        project.process.nonPlanar3Axis=!project.machine.rotary_axes();
+        if(!project.machine.rotary_axes())project.process.profileNormal=false;
+        else {project.machine.minB=index?-75*pi/180:-pi;project.machine.maxB=-project.machine.minB;if(project.machine.controller==Controller::GenericMarlin)project.machine.controller=Controller::Duet;}
+        if(reslice)project.path.clear();
         invalidate();
         if (!project.path.empty())
             run("Regenerate");
@@ -481,9 +493,13 @@ void MainWindow::refresh() {
     motionValidated=project.report.exportable() && project.report.fingerprint==project.fingerprint();
     QSignalBlocker a(controller), b(layout), c(extension), j(dummyToolhead), densityGuard(filamentDensity),costGuard(filamentCost);
     controller->setCurrentIndex(int(project.machine.controller)); layout->setCurrentIndex(int(project.machine.layout));
-    extension->setChecked(project.machine.klipperExtension); extension->setEnabled(project.machine.controller==Controller::Klipper);
+    if(auto model=qobject_cast<QStandardItemModel*>(controller->model()))model->item(2)->setEnabled(!project.machine.rotary_axes());
+    extension->setChecked(project.machine.klipperExtension); extension->setEnabled(project.machine.controller==Controller::Klipper && project.machine.rotary_axes());
+    if(auto action=findChild<QAction*>("importProfileGuide"))action->setEnabled(project.machine.rotary_axes());
     QSignalBlocker modeGuard(mode); mode->setCurrentIndex(replaying?1:0);
     if(processEditor->valid()) processEditor->set_settings(project.process);
+    processEditor->set_layout(project.machine.layout);
+    if(auto axes=findChild<QCheckBox*>("showRotaryAxes"))axes->setEnabled(project.machine.rotary_axes());
     processError->setText(processEditor->validation_error()); sliceButton->setEnabled(processEditor->valid());
     filamentName->setText(project.filamentName); filamentDensity->setValue(project.filamentDensity); filamentCost->setValue(project.filamentCost);
     partName->setText(project.part.empty()?"No printable part":QFileInfo(project.part.name).fileName()+" · Global settings");
@@ -606,6 +622,7 @@ void MainWindow::import_part() {
         } else p.part = load_mesh(file);
         Vec3 offset = p.part.bounds().center();
         offset.z() = p.part.bounds().min().z();
+        if(!p.machine.rotary_axes())offset.head<2>()-=(p.machine.minXYZ+p.machine.maxXYZ).head<2>()/2;
         for (auto &v : p.part.vertices)
             v -= offset;
         p.partPlacement = translation(-offset);
@@ -709,6 +726,7 @@ void MainWindow::machine_setup() {
     auto pick = new QPushButton("Pick nozzle tip in preview");
     previewColumn->addWidget(pick);
     auto angleA = spin(0, -75, 75, 1), angleB = spin(0, -180, 180, 1);
+    angleA->setEnabled(copy.machine.rotary_axes());angleB->setEnabled(copy.machine.rotary_axes());
     previewColumn->addWidget(new QLabel("Calibration pose · A / B or C degrees"));
     previewColumn->addWidget(angleA);
     previewColumn->addWidget(angleB);

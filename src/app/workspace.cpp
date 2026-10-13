@@ -90,7 +90,11 @@ void MainWindow::update_move_preview() {
         QTextCharFormat format; format.setForeground(i==state.move?QColor("#00eb76"):QColor("#d5dddd")); format.setFontWeight(i==state.move?QFont::Bold:QFont::Normal);
         format.setFontPointSize(9);
         double feed=0; if(i>0) {const auto &a=p.path[i-1];auto previous=controller_axes(p.machine,p.active_toolhead(),a.joint);feed=feed_metric(p.machine,previous,axes,s.deltaE)/std::max(.001,s.time-a.time)*60;}
-        auto cursor=movePreview->textCursor(); cursor.movePosition(QTextCursor::End); cursor.insertText(QString("\n%1 · L%2 · %3\n%13 X%4 Y%5 Z%6 A%7 %8%9 E%10 F%14\n; t=%11 s · requested %12 mm/s\n")
+        auto cursor=movePreview->textCursor(); cursor.movePosition(QTextCursor::End);
+        if(!p.machine.rotary_axes()) {
+            cursor.insertText(QString("\n%1 · L%2 · %3\n%4 X%5 Y%6 Z%7 E%8 F%9\n; fixed nozzle +Z · t=%10 s\n").arg(i).arg(s.layer+1).arg(role_name(s.role)).arg(i==0?"Initial pose":"G1").arg(axes.xyz.x(),0,'f',3).arg(axes.xyz.y(),0,'f',3).arg(axes.xyz.z(),0,'f',3).arg(s.deltaE,0,'f',5).arg(feed,0,'f',2).arg(s.time,0,'f',2),format);continue;
+        }
+        cursor.insertText(QString("\n%1 · L%2 · %3\n%13 X%4 Y%5 Z%6 A%7 %8%9 E%10 F%14\n; t=%11 s · requested %12 mm/s\n")
             .arg(i).arg(s.layer+1).arg(role_name(s.role)).arg(axes.xyz.x(),0,'f',3).arg(axes.xyz.y(),0,'f',3).arg(axes.xyz.z(),0,'f',3)
             .arg(s.joint.a*180/pi,0,'f',3).arg(p.machine.axis2()).arg(s.joint.b*180/pi,0,'f',3).arg(s.deltaE,0,'f',5).arg(s.time,0,'f',2).arg(s.speed,0,'f',1).arg(i==0?"Initial pose":"G1").arg(feed,0,'f',2),format);
     }

@@ -1,0 +1,29 @@
+{
+  "version": "0.3.3",
+  "checks": {
+    "coreCases": 53,
+    "desktopWorkflows": 9,
+    "flowCases": 8,
+    "failures": 0
+  },
+  "xyz": {
+    "movements": 27076,
+    "layers": 30,
+    "fixedNozzle": true,
+    "maximumRotaryAngleRadians": 0,
+    "maximumWithinLayerZVariationMm": 1.966230715035885,
+    "maximumSurfaceSlopeDegrees": 14.25936303669613,
+    "localBeadHeightMm": [
+      0.19498010729974796,
+      0.30000000000000027
+    ],
+    "maximumExtrusionLengthErrorMm": 1.3877787807814457e-17,
+    "planarBaseChecked": true,
+    "depositionCoverage": 1,
+    "depositionViolations": 0,
+    "collisionValidationCompleted": false,
+    "exportable": false
+  },
+  "nativeFirmwareValidated": false,
+  "physicalPrintingValidated": false
+}

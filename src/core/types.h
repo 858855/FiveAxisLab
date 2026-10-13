@@ -9,6 +9,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace fiveaxis {
@@ -16,8 +17,8 @@ using Vec3 = Eigen::Vector3d;
 using Mat3 = Eigen::Matrix3d;
 using Transform = Eigen::Isometry3d;
 constexpr double pi = 3.14159265358979323846;
-enum class Layout { RotaryBed, TiltingHead };
-enum class Controller { Duet, Klipper };
+enum class Layout { RotaryBed, TiltingHead, Cartesian3Axis };
+enum class Controller { Duet, Klipper, GenericMarlin };
 enum class Link { Carriage, RotaryStage, Nozzle };
 enum class Role { Travel, Wall, Infill, Support, Retract, OuterWall, SolidInfill, TopSurface, BottomSurface, Brim, Skirt, Bridge };
 enum class SurfacePattern { Rectilinear, Monotonic, Concentric };
@@ -83,8 +84,9 @@ struct MachineProfile {
     bool klipperExtension = true;
     double stockExtrusionRatio = 0.25;
     QString klipperRevision;
+    bool rotary_axes() const {return layout!=Layout::Cartesian3Axis;}
     QString axis2() const {
-        return layout == Layout::RotaryBed ? "C" : "B";
+        return !rotary_axes()?QString{}:layout == Layout::RotaryBed ? "C" : "B";
     }
 };
 struct Fixture {
@@ -95,6 +97,7 @@ struct Fixture {
 };
 struct Sample {
     Vec3 position = Vec3::Zero(), direction = Vec3::UnitZ();
+    std::optional<Vec3> surfaceNormal;
     JointState joint;
     Role role = Role::Travel;
     double time = 0, deltaE = 0, width = 0.45, height = 0.2, speed = 25;
@@ -146,6 +149,8 @@ struct ProcessSettings {
     double directionCone = 10 * pi / 180, maximumTilt = 65 * pi / 180;
     bool curved = true, supports = true;
     bool profileNormal = false;
+    bool nonPlanar3Axis = false;
+    double nonPlanarBase = 2, nonPlanarSlope = 20 * pi / 180;
     int wallCount = 2;
     double maximumBridge = 5;
     double nozzleDiameter = .4, firstLayerHeight = 0, firstLayerWidth = 0;
@@ -250,6 +255,8 @@ void time_path(Project &p);
 SimulationState simulation_at(const Project &p, double time, bool rebuildDeposition = true);
 Project demo_project();
 QString role_name(Role r);
+QString layout_name(Layout layout);
+Vec3 surface_normal(const Sample &sample);
 constexpr int role_count = 12;
 QJsonObject project_json(const Project &p);
 Project project_from_json(const QJsonObject &json);

@@ -8,6 +8,7 @@
 #include "core/stress.h"
 #include "core/motion_preview.h"
 #include "core/profile.h"
+#include "core/nonplanar.h"
 #include <QFile>
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
@@ -19,6 +20,52 @@ using namespace fiveaxis;
 class CoreTests : public QObject {
     Q_OBJECT
   private Q_SLOTS:
+    void cartesian_nonplanar_slicing(){
+        auto p=nonplanar_cartesian_project();p.process.layerHeight=.6;p.process.width=.8;p.process.wallCount=1;p.process.infill=.2;
+        try{slice_project(p);}catch(const std::exception &e){QFAIL(e.what());}
+        QCOMPARE(cartesian_motion_violation(p),-1);QVERIFY(p.deposition.checked);QVERIFY(p.deposition.coverage>.95);
+        std::map<int,std::pair<double,double>> heights;bool thinner=false,sloped=false;
+        for(size_t i=1;i<p.path.size();++i) {
+            const auto &s=p.path[i];QVERIFY(std::abs(s.joint.a)<1e-12 && std::abs(s.joint.b)<1e-12);QVERIFY((s.direction-Vec3::UnitZ()).norm()<1e-12);
+            if(s.deltaE<=0)continue;QVERIFY(s.surfaceNormal.has_value());
+            if(!heights.count(s.layer))heights[s.layer]={s.position.z(),s.position.z()};auto &h=heights[s.layer];h.first=std::min(h.first,s.position.z());h.second=std::max(h.second,s.position.z());
+            thinner|=s.height<p.process.layerHeight*.95;sloped|=s.surfaceNormal->z()<.999;
+            double expected=(s.position-p.path[i-1].position).norm()*bead_area(s.width,s.height)/(pi*std::pow(p.machine.filamentDiameter/2,2));QVERIFY(std::abs(expected-s.deltaE)<1e-10);
+        }
+        QVERIFY(thinner && sloped);QVERIFY(heights.begin()->second.second-heights.begin()->second.first<1e-8);QVERIFY(heights.rbegin()->second.second-heights.rbegin()->second.first>1);
+        for(const auto &[layer,h]:heights)if((layer+1)*p.process.layerHeight<=p.process.nonPlanarBase+1e-8)QVERIFY(h.second-h.first<1e-8 && std::abs(h.first-(layer+1)*p.process.layerHeight)<1e-8);
+        QTemporaryDir dir;save_project(p,dir.filePath("xyz.5axis"));auto loaded=load_project(dir.filePath("xyz.5axis"));QCOMPARE(loaded.fingerprint(),p.fingerprint());QCOMPARE(cartesian_motion_violation(loaded),-1);
+        auto steep=p;steep.process.nonPlanarSlope=pi/180;QVERIFY_EXCEPTION_THROWN(slice_project(steep),std::runtime_error);
+        p.process.nonPlanar3Axis=false;slice_project(p);for(const auto &s:p.path)if(s.deltaE>0)QVERIFY(std::abs(s.position.z()-(s.layer+1)*p.process.layerHeight)<1e-5 || s.layer==14);
+    }
+    void cartesian_controllers_data(){QTest::addColumn<int>("controller");QTest::newRow("duet")<<0;QTest::newRow("klipper")<<1;QTest::newRow("generic-marlin")<<2;}
+    void cartesian_controllers(){
+        QFETCH(int,controller);Project p;p.machine.layout=Layout::Cartesian3Axis;p.machine.controller=Controller(controller);p.machine.clearance=.01;p.process.nonPlanar3Axis=true;
+        // Raised rigid geometry isolates adapter semantics from the nozzle-contact regressions.
+        Component c;c.id=c.name="Nozzle";c.nozzle=true;c.mesh=cylinder_mesh(Vec3(0,0,.3),.05,.2);p.toolhead.components.push_back(c);
+        for(double x:{-1.0,0.0,1.0}){Sample s;s.position=s.joint.xyz=Vec3(x,0,.2+.08*x*x);s.surfaceNormal=Vec3(-.16*x,0,1).normalized();s.direction=Vec3::UnitZ();s.role=p.path.empty()?Role::Travel:Role::Wall;if(!p.path.empty())s.deltaE=(s.position-p.path.back().position).norm()*bead_area(s.width,s.height)/(pi*std::pow(p.machine.filamentDiameter/2,2));p.path.push_back(s);}
+        time_path(p);p.depositionValid=true;p.report=validate_motion(p);QVERIFY2(p.report.exportable(),p.report.events.empty()?"Missing collision diagnostic":qPrintable(p.report.events.front().reason));auto gcode=export_gcode(p);
+        QVERIFY(!gcode.contains("MANUAL_STEPPER") && !gcode.contains("FIVEAXIS_ENABLE") && !gcode.contains("FIVEAXIS_DISABLE"));
+        for(const auto &line:gcode.split('\n'))if(line.startsWith("G1 "))QVERIFY(!QRegularExpression("[ABC]\\s*[-+0-9]").match(line).hasMatch());
+        auto replay=replay_gcode(p,gcode);QCOMPARE(cartesian_motion_violation(replay),-1);for(size_t i=0;i<replay.path.size();++i){QVERIFY((replay.path[i].position-p.path[i].position).norm()<1e-8);QVERIFY(replay.path[i].surfaceNormal.has_value());}
+        QVERIFY_EXCEPTION_THROWN(replay_gcode(p,"G1 X0 Y0 Z1 A0 E0 F600"),std::runtime_error);
+        p.path.back().joint.a=.1;QVERIFY(!validate_motion(p).exportable());p.report.status=Status::Clear;p.report.fingerprint=p.fingerprint();QVERIFY_EXCEPTION_THROWN(export_gcode(p),std::runtime_error);
+    }
+    void cartesian_repair_and_limits(){
+        Project p;p.machine.layout=Layout::Cartesian3Axis;p.machine.controller=Controller::GenericMarlin;p.machine.minXYZ=Vec3(-5,-5,0);p.machine.maxXYZ=Vec3(5,5,10);
+        Component c;c.id=c.name="Nozzle";c.nozzle=true;c.mesh=cylinder_mesh(Vec3(0,0,.1),.05,.2);p.toolhead.components.push_back(c);
+        p.fixtures.push_back({"Travel obstacle",box_mesh(Vec3(0,0,3),Vec3(.8,.8,1)),false});
+        Sample a,b;a.position=a.joint.xyz=Vec3(-2,0,3);b=a;b.position=b.joint.xyz=Vec3(2,0,3);b.deltaE=-.2;p.path={a,b};time_path(p);QVERIFY(!validate_motion(p).exportable());QVERIFY(repair_motion(p));QCOMPARE(cartesian_motion_violation(p),-1);
+        for(const auto &s:p.path)QVERIFY(std::abs(s.joint.a)+std::abs(s.joint.b)<1e-12);QCOMPARE(p.path.back().deltaE,-.2);
+        auto q=p.path.back().joint;q.a=.1;QVERIFY(!in_limits(p.machine,p.toolhead,q));q.a=0;q.xyz.x()=6;QVERIFY(!in_limits(p.machine,p.toolhead,q));
+        QVERIFY(inverse_kinematics(p.machine,Vec3(0,0,3),Vec3(.2,0,1),{},p.toolhead).empty());
+        p.machine.layout=Layout::RotaryBed;p.machine.controller=Controller::Duet;p.process.nonPlanar3Axis=true;QVERIFY(!validate_motion(p).exportable());QVERIFY_EXCEPTION_THROWN(export_gcode(p),std::runtime_error);
+    }
+    void cartesian_heater_collision(){
+        Project p;p.machine.layout=Layout::Cartesian3Axis;p.useDummyToolhead=true;p.dummyToolhead=make_dummy_toolhead(.4);Component heater=p.dummyToolhead.components[2];
+        JointState q;q.xyz=Vec3(0,0,3);auto pose=component_pose(p.machine,p.active_toolhead(),heater,q);Vec3 center=pose*heater.mesh.bounds().center();p.fixtures.push_back({"Tall neighboring material",box_mesh(center,Vec3(1,1,1)),false});
+        CollisionScene scene(p);QCOMPARE(scene.check_pose(q,false,q.xyz).status,Status::Collision);
+    }
     void profile_normal_slicing_data(){QTest::addColumn<bool>("head");QTest::newRow("bed")<<false;QTest::newRow("head")<<true;}
     void profile_normal_slicing(){
         QFETCH(bool,head);auto p=spiral_profile_project(head?Layout::TiltingHead:Layout::RotaryBed);

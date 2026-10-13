@@ -77,6 +77,9 @@ ProcessEditor::ProcessEditor(QWidget *parent):QWidget(parent) {
     section(1,"Strength / five-axis"); check("curved","Curved layers from stress"); check("profileNormal","Nozzle perpendicular to profile");
     bindings["profileNormal"].input->setToolTip("Slice along a centerline guide, without FEM. Process → Import profile guide, or Simulation → Open spiral five-axis test.");
     number("directionCone","Orientation search cone",0,89,"°",180/pi,true); number("maximumTilt","Maximum deposition tilt",0,89,"°",180/pi,true);
+    section(1,"Standard XYZ · non-planar");check("nonPlanar3Axis","Conform layers to top surface");
+    number("nonPlanarBase","Planar base height",0,100,"mm");number("nonPlanarSlope","Maximum surface slope",1,60,"°",180/pi);
+    bindings["nonPlanar3Axis"].input->setToolTip("For standard XYZ printers: nozzle remains upright; layers above the planar base follow the model top.");
     section(2,"First layer speed"); number("firstLayerSpeed","First layer",0,1000,"mm/s"); number("firstLayerInfillSpeed","First layer infill",0,1000,"mm/s");
     section(2,"Other layer speeds"); number("speed","Default print",.1,1000,"mm/s");
     for(const auto &item:QList<QPair<QString,QString>>{{"outerWallSpeed","Outer wall"},{"innerWallSpeed","Inner wall"},{"infillSpeed","Sparse infill"},{"solidSpeed","Internal solid infill"},{"topSpeed","Top surface"},{"supportSpeed","Support"}}) number(item.first,item.second,0,1000,"mm/s");
@@ -105,6 +108,8 @@ void ProcessEditor::set_settings(const ProcessSettings &settings) {
     updating=true; base=settings; auto j=process_json(settings);
     for(auto it=bindings.begin();it!=bindings.end();++it) {
         auto key=it.key(); auto value=j[key];
+        if(key=="nonPlanarBase")value=settings.nonPlanarBase;
+        if(key=="nonPlanarSlope")value=settings.nonPlanarSlope;
         if(key.startsWith("overhang") && key.size()==9) value=settings.overhangSpeeds[key.right(1).toInt()];
         if(key=="supportMode") value=settings.supports?int(settings.supportMode):2;
         if(auto input=qobject_cast<QDoubleSpinBox*>(it->input)) input->setValue(value.toDouble()*it->scale);
@@ -113,6 +118,14 @@ void ProcessEditor::set_settings(const ProcessSettings &settings) {
         else if(auto input=qobject_cast<QComboBox*>(it->input)) input->setCurrentIndex(value.isBool()?int(value.toBool()):value.toInt());
     }
     error.clear(); updating=false; filter();
+}
+void ProcessEditor::set_layout(Layout layout) {
+    bool xyz=layout==Layout::Cartesian3Axis;
+    auto group=bindings["nonPlanar3Axis"].row->parentWidget();group->setVisible(xyz);
+    if(auto column=qobject_cast<QVBoxLayout*>(group->parentWidget()->layout()))column->insertWidget(xyz?0:column->count()-1,group);
+    bindings["profileNormal"].row->parentWidget()->setVisible(!xyz);
+    for(const auto &key:{"nonPlanar3Axis","nonPlanarBase","nonPlanarSlope"})bindings[key].input->setEnabled(xyz);
+    for(const auto &key:{"profileNormal","curved","directionCone","maximumTilt"})bindings[key].input->setEnabled(!xyz);
 }
 ProcessSettings ProcessEditor::settings() const {
     auto j=process_json(base); auto overhang=j["overhangSpeeds"].toArray();

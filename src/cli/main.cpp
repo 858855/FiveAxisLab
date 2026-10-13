@@ -8,6 +8,7 @@
 #include "core/stress.h"
 #include "core/motion_preview.h"
 #include "core/profile.h"
+#include "core/nonplanar.h"
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDir>
@@ -46,8 +47,18 @@ int main(int argc, char **argv) {
     parser.addOption({"axis-demo", "Save a non-printing tilt/roll preview; requires --output", "bed|head"});
     parser.addOption({"spiral-demo", "Generate the profile-normal spiral test; requires --output", "bed|head"});
     parser.addOption({"profile-guide", "Slice perpendicular to profile stations in source-model millimetres", "file"});
+    parser.addOption({"three-axis", "Use a standard XYZ printer and conformal non-planar layers"});
+    parser.addOption({"xyz-planar", "Use a standard XYZ printer with planar layers"});
+    parser.addOption({"marlin", "Use generic / Marlin XYZ G-code"});
+    parser.addOption({"nonplanar-demo", "Generate the standard XYZ non-planar test; requires --output"});
     parser.process(app);
     try {
+        if((parser.isSet("three-axis") && parser.isSet("xyz-planar")) || (parser.isSet("marlin") && parser.isSet("klipper")))throw std::runtime_error("Choose one XYZ slicing mode and one controller");
+        if(parser.isSet("nonplanar-demo")) {
+            if(!parser.isSet("output") || parser.isSet("slice") || parser.isSet("validate") || parser.isSet("gcode") || parser.isSet("replay"))throw std::runtime_error("Non-planar demo requires --output; validate separately before export");
+            auto p=nonplanar_cartesian_project();slice_project(p);save_project(p,parser.value("output"));std::cout<<"XYZ non-planar test saved: "<<p.path.size()<<" movements; validation remains required.\n";return 0;
+        }
+        if((parser.isSet("three-axis") || parser.isSet("xyz-planar")) && (parser.isSet("head") || parser.isSet("head-motion") || parser.isSet("profile-guide")))throw std::runtime_error("XYZ mode cannot use rotary-head or profile-normal options");
         if(parser.isSet("spiral-demo")) {
             auto value=parser.value("spiral-demo");if(value!="bed" && value!="head")throw std::runtime_error("Spiral demo must be bed or head");
             if(!parser.isSet("output") || parser.isSet("gcode") || parser.isSet("slice") || parser.isSet("validate") || parser.isSet("replay"))throw std::runtime_error("Spiral demo requires --output; validate it separately before export");
@@ -123,6 +134,11 @@ int main(int argc, char **argv) {
         }
         if (parser.isSet("klipper"))
             p.machine.controller = Controller::Klipper;
+        if(parser.isSet("three-axis") || parser.isSet("xyz-planar")) {
+            p.machine.layout=Layout::Cartesian3Axis;p.process.profileNormal=false;p.process.nonPlanar3Axis=parser.isSet("three-axis");
+            if(!parser.isSet("klipper"))p.machine.controller=Controller::GenericMarlin;
+        }
+        if(parser.isSet("marlin"))p.machine.controller=Controller::GenericMarlin;
         if (parser.isSet("stock-klipper"))
             p.machine.klipperExtension = false;
         if(parser.isSet("toolhead") && parser.isSet("dummy-toolhead"))
@@ -141,6 +157,7 @@ int main(int argc, char **argv) {
             p.part = load_mesh(parser.value("slice"));
             Vec3 shift = p.part.bounds().center();
             shift.z() = p.part.bounds().min().z();
+            if(!p.machine.rotary_axes())shift.head<2>()-=(p.machine.minXYZ+p.machine.maxXYZ).head<2>()/2;
             for (auto &v : p.part.vertices)
                 v -= shift;
             p.partPlacement = translation(-shift);

@@ -8,6 +8,8 @@ Extract the locally packaged `dist/FiveAxisLab-0.3.0-win64.zip` and run `FiveAxi
 
 ![Spiral profile-normal five-axis preview](examples/reports/spiral-head-preview.png)
 
+Version 0.3.3 adds **Standard XYZ · 3-axis** for normal printers, with conformal non-planar layers, a planar base, a slope limit and an upright nozzle. **Simulation → Open 3-axis non-planar test** previews XYZ paths with no rotary movement. Generic/Marlin, Duet and stock Klipper output contains only Cartesian motion and E. [Controls, output and qualification limits](docs/THREE_AXIS_NONPLANAR.md).
+
 Version 0.3.2 adds **Nozzle perpendicular to profile**, independent of FEM. **Simulation → Open spiral five-axis test** generates sections along a centerline and coordinated bed/head motion that holds the nozzle normal to each section. Preview shows the active plane and orientation error. Profile guides round-trip with the project; generation, validation and export reject lost alignment. The existing S-curve preview is regenerated with a guide. [Profile controls and guide format](docs/PROFILE_NORMAL.md).
 
 Version 0.3.1 adds **Preview → Axis behavior**. Follow the recorded toolpath angles, drag **Manual tilt / roll** controls, or select **Animated tilt / roll**. Rotary-bed A/C and tilting-head A/B use calibrated pivots, link attachments and TCP compensation; rings mark the actual axis locations. Manual/animated poses pause the deposited prefix, preserve the project and disable export. **Simulation → Open rotary-bed / tilting-head axis demonstration** opens a synthetic, non-printing sweep with coordinated XYZ and rotary motion. See [axis preview controls](docs/AXIS_PREVIEW.md).

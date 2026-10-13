@@ -1,0 +1,31 @@
+{
+    "checkedIntervals": 4670,
+    "controllerSemanticReplayValidated": true,
+    "deposition": {
+        "checked": true,
+        "coverage": 1,
+        "dependencies": [
+        ],
+        "unsupported": [
+        ]
+    },
+    "diagnostics": [
+        "Synthetic machine and material: geometric research demonstration.",
+        "Deposition support / gravity check: 0 flagged movements, 0 dependency edges, 100.0% sampled volume coverage."
+    ],
+    "dummyToolhead": true,
+    "events": [
+    ],
+    "fingerprint": "bc8e634d6b2feec13082f825844bbe0f783c678f1ccd80bfce455a4628333224",
+    "minimumClearance": 0.25483301927757424,
+    "modeled": [
+        "Nozzle [nozzle]",
+        "Heat break [break]",
+        "Heater block [heater]",
+        "Fan shroud [fan]",
+        "Bed"
+    ],
+    "nativeFirmwareValidated": false,
+    "physicalPrintingValidated": false,
+    "status": 0
+}

@@ -7,6 +7,7 @@
 #include "stress.h"
 #include "process.h"
 #include "profile.h"
+#include "nonplanar.h"
 #include <Eigen/LU>
 #include <Eigen/Sparse>
 #include <Eigen/SparseCholesky>
@@ -21,8 +22,13 @@ struct Surface {
     Mesh mesh;
     std::vector<Vec3> normals;
     std::vector<double> distance;
+    std::vector<double> heightScale;
 };
 static std::vector<double> scalar_field(const Project &p) {
+    if(!p.machine.rotary_axes()) {
+        if(p.process.nonPlanar3Axis)return conformal_field(p);
+        std::vector<double> field;for(const auto &v:p.volume.vertices)field.push_back(v.z());return field;
+    }
     const auto &mesh = p.volume;
     size_t n = mesh.vertices.size();
     std::vector<double> values;
@@ -111,6 +117,7 @@ static std::vector<double> scalar_field(const Project &p) {
 }
 static Surface iso_surface(const VolumeMesh &mesh, const std::vector<double> &values, double level) {
     Surface out;
+    std::vector<int> normalCounts;
     std::map<std::array<long long, 3>, int> ids;
     const int edges[][2] = {{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}};
     for (auto &t : mesh.cells) {
@@ -127,7 +134,7 @@ static Surface iso_surface(const VolumeMesh &mesh, const std::vector<double> &va
         Vec3 normal = M.inverse().bottomRows<3>() * v;
         if (normal.norm() < 1e-10)
             continue;
-        normal.normalize();
+        double scale=1/normal.norm();normal.normalize();
         for (auto &e : edges) {
             int a = t.nodes[e[0]], b = t.nodes[e[1]];
             double x = values[a] - level, y = values[b] - level;
@@ -158,9 +165,11 @@ static Surface iso_surface(const VolumeMesh &mesh, const std::vector<double> &va
                 ids[key] = id;
                 out.mesh.vertices.push_back(q);
                 out.normals.push_back(normal);
+                out.heightScale.push_back(scale);normalCounts.push_back(1);
             } else {
                 id = found->second;
                 out.normals[id] += normal;
+                out.heightScale[id]+=scale;++normalCounts[id];
             }
             index.push_back(id);
         }
@@ -169,6 +178,7 @@ static Surface iso_surface(const VolumeMesh &mesh, const std::vector<double> &va
     }
     for (auto &n : out.normals)
         n.normalize();
+    for(size_t i=0;i<out.heightScale.size();++i)out.heightScale[i]/=normalCounts[i];
     std::vector<std::vector<std::pair<int, double>>> graph(out.mesh.vertices.size());
     std::map<std::pair<int, int>, int> counts;
     for (auto t : out.mesh.triangles)
@@ -204,7 +214,7 @@ static Surface iso_surface(const VolumeMesh &mesh, const std::vector<double> &va
     return out;
 }
 static bool surface_point(const Surface &s, const Eigen::Vector2d &xy, Vec3 &point, Vec3 &normal,
-                          double &distance) {
+                          double &distance,double *scale=nullptr) {
     for (auto t : s.mesh.triangles) {
         const Vec3 &a = s.mesh.vertices[t[0]];
         Vec3 b = s.mesh.vertices[t[1]], c = s.mesh.vertices[t[2]];
@@ -220,6 +230,7 @@ static bool surface_point(const Surface &s, const Eigen::Vector2d &xy, Vec3 &poi
         point = u * a + w[0] * b + w[1] * c;
         normal = (u * s.normals[t[0]] + w[0] * s.normals[t[1]] + w[1] * s.normals[t[2]]).normalized();
         distance = u * s.distance[t[0]] + w[0] * s.distance[t[1]] + w[1] * s.distance[t[2]];
+        if(scale)*scale=u*s.heightScale[t[0]]+w[0]*s.heightScale[t[1]]+w[1]*s.heightScale[t[2]];
         return true;
     }
     return false;
@@ -250,6 +261,7 @@ static std::vector<Surface> decompose_surface(const Surface &s) {
                 out.mesh.vertices.push_back(s.mesh.vertices[v]);
                 out.normals.push_back(s.normals[v]);
                 out.distance.push_back(s.distance[v]);
+                out.heightScale.push_back(s.heightScale[v]);
             } else
                 tri[j] = it->second;
         }
@@ -260,7 +272,8 @@ static std::vector<Surface> decompose_surface(const Surface &s) {
         result.push_back(std::move(item.second));
     return result;
 }
-using Curve = std::vector<std::pair<Vec3, Vec3>>;
+struct CurvePoint {Vec3 first,second;double heightScale=1;};
+using Curve = std::vector<CurvePoint>;
 static Curve simplify_curve(const Curve &curve, double tolerance, double angularTolerance) {
     if (curve.size()<3 || tolerance<=0) return curve;
     std::vector<bool> keep(curve.size(),false); keep.front()=keep.back()=true;
@@ -271,6 +284,8 @@ static Curve simplify_curve(const Curve &curve, double tolerance, double angular
             double u=delta.squaredNorm()>1e-16 ? std::clamp((curve[i].first-curve[first].first).dot(delta)/delta.squaredNorm(),0.0,1.0) : 0;
             Vec3 normal=curve[first].second*(1-u)+curve[last].second*u;
             double error=(curve[i].first-curve[first].first-u*delta).norm()/tolerance;
+            double scale=curve[first].heightScale*(1-u)+curve[last].heightScale*u;
+            error=std::max(error,std::abs(curve[i].heightScale-scale)/std::max(.005,curve[i].heightScale*.02));
             if(normal.norm()<1e-8 || normal.normalized().dot(curve[i].second)<std::cos(angularTolerance)) error=std::max(error,2.0);
             if(error>worst) { worst=error; chosen=i; }
         }
@@ -299,6 +314,7 @@ static void add_curve(Project &p, const Curve &input, Role role, int layer,
     Sample start;
     start.position = curve.front().first + Vec3(0, 0, p.process.travelLift);
     start.direction = curve.front().second;
+    if(!p.machine.rotary_axes()){start.surfaceNormal=start.direction;start.direction=Vec3::UnitZ();}
     start.role = Role::Travel;
     start.layer = layer;
     start.region = region;
@@ -325,18 +341,22 @@ static void add_curve(Project &p, const Curve &input, Role role, int layer,
             s.region = region;
             s.width = width;
             s.height = height;
+            if(!p.machine.rotary_axes()) {
+                s.surfaceNormal=s.direction;s.direction=Vec3::UnitZ();
+                if(p.process.nonPlanar3Axis && role!=Role::Support)s.height*=curve[i-1].heightScale*(1-double(j)/count)+curve[i].heightScale*double(j)/count;
+            }
             s.speed = requestedSpeed;
             if(p.process.slowOverhangs && layer>0 && role!=Role::Support && role!=Role::Brim && role!=Role::Skirt) {
                 int unsupported=0;
                 for(int k=0;k<10;++k) {
-                    Vec3 side=s.direction.cross((curve[i].first-curve[i-1].first).normalized());
-                    Vec3 probe=s.position-s.direction*height*1.25+side*width*(double(k)/9-.5);
+                    Vec3 normal=surface_normal(s),side=normal.cross((curve[i].first-curve[i-1].first).normalized());
+                    Vec3 probe=s.position-normal*s.height*1.25+side*width*(double(k)/9-.5);
                     unsupported+=!contains(p.part,probe);
                 }
                 int band=unsupported<=1?0:unsupported<=2?1:unsupported<=5?2:unsupported<=7?3:4;
                 if(p.process.overhangSpeeds[band]>0) s.speed=std::min(s.speed,p.process.overhangSpeeds[band]);
             }
-            s.deltaE = (s.position - p.path.back().position).norm() * area / filament;
+            s.deltaE = (s.position - p.path.back().position).norm() * (!p.machine.rotary_axes()?bead_area(width,s.height):area) / filament;
             p.path.push_back(s);
         }
     }
@@ -378,17 +398,17 @@ static void offset_curve(Curve &curve,double amount) {
         throw std::runtime_error("XY offset collapses or splits a contour; reduce compensation or adhesion width");
     Curve output;
     for(const auto &p:result.front().outer()) {
-        Eigen::Vector2d xy(bg::get<0>(p),bg::get<1>(p)); double best=1e100; Vec3 surface=Vec3::Zero(),normal=Vec3::UnitZ();
+        Eigen::Vector2d xy(bg::get<0>(p),bg::get<1>(p)); double best=1e100,scale=1; Vec3 surface=Vec3::Zero(),normal=Vec3::UnitZ();
         for(size_t i=1;i<original.size();++i) {
             Vec3 delta=original[i].first-original[i-1].first; double length=delta.head<2>().squaredNorm();
             double u=length>1e-16?std::clamp((xy-original[i-1].first.head<2>()).dot(delta.head<2>())/length,0.0,1.0):0;
             Vec3 candidate=original[i-1].first+u*delta; double error=(xy-candidate.head<2>()).squaredNorm();
-            if(error<best) {best=error;surface=candidate;normal=(original[i-1].second*(1-u)+original[i].second*u).normalized();}
+            if(error<best) {best=error;surface=candidate;normal=(original[i-1].second*(1-u)+original[i].second*u).normalized();scale=original[i-1].heightScale*(1-u)+original[i].heightScale*u;}
         }
         if(std::abs(normal.z())<.1) throw std::runtime_error("XY compensation requires layer normals with a Z component");
         Vec3 displacement(xy.x()-surface.x(),xy.y()-surface.y(),0);
         displacement.z()=-(normal.x()*displacement.x()+normal.y()*displacement.y())/normal.z();
-        output.push_back({surface+displacement,normal});
+        output.push_back({surface+displacement,normal,scale});
     }
     output.pop_back(); size_t seam=0; double nearest=1e100;
     for(size_t i=0;i<output.size();++i) {double d=(output[i].first-curve.front().first).squaredNorm();if(d<nearest){nearest=d;seam=i;}}
@@ -401,11 +421,11 @@ static void walls(Project &p, const Surface &s, int layer, int &region, int coun
     for (int index = 0; index < count; ++index) {
         int wall=forced!=Role::Travel || p.process.outerWallFirst?index:count-index-1;
         double target = forced==Role::Travel ? wall_offset(p.process,wall,layer) : firstOffset+index*spacing;
-        std::vector<std::pair<Vec3, Vec3>> ends;
+        Curve ends;
         std::vector<std::pair<int, int>> edges;
         std::map<std::array<long long, 3>, int> ids;
         for (auto t : s.mesh.triangles) {
-            std::vector<std::pair<Vec3, Vec3>> segment;
+            Curve segment;
             for (int j = 0; j < 3; ++j) {
                 int a = t[j], b = t[(j + 1) % 3];
                 double da = s.distance[a] - target, db = s.distance[b] - target;
@@ -413,7 +433,7 @@ static void walls(Project &p, const Surface &s, int layer, int &region, int coun
                     continue;
                 double u = da / (da - db);
                 segment.push_back({s.mesh.vertices[a] + u * (s.mesh.vertices[b] - s.mesh.vertices[a]),
-                                   (s.normals[a] + u * (s.normals[b] - s.normals[a])).normalized()});
+                                   (s.normals[a] + u * (s.normals[b] - s.normals[a])).normalized(),s.heightScale[a]*(1-u)+s.heightScale[b]*u});
             }
             if (segment.size() != 2)
                 continue;
@@ -443,7 +463,7 @@ static void walls(Project &p, const Surface &s, int layer, int &region, int coun
             auto key = std::minmax(edge.first, edge.second);
             if (used.count(key))
                 continue;
-            std::vector<std::pair<Vec3, Vec3>> curve;
+            Curve curve;
             int first = edge.first, current = first, next = edge.second;
             curve.push_back(ends[first]);
             for (size_t step = 0; step <= edges.size(); ++step) {
@@ -529,22 +549,22 @@ static void infill(Project &p, const Surface &surface, int layer, int &region, R
         for (double x = b.min().x(); x <= b.max().x(); x += spacing) {
             Eigen::Vector2d seed(x, y);
             Vec3 point, n;
-            double d;
-            if (near(seed, .8 * spacing) || !surface_point(surface, seed, point, n, d) ||
+            double d,scale;
+            if (near(seed, .8 * spacing) || !surface_point(surface, seed, point, n, d,&scale) ||
                 d < wall_band(p.process,layer))
                 continue;
-            std::vector<std::pair<Vec3, Vec3>> halves[2];
+            Curve halves[2];
             for (int sign = 0; sign < 2; ++sign) {
                 Eigen::Vector2d xy = seed;
                 double angle=p.process.infillAngle+(families==2?family*pi/2:(layer%2)*pi/2);
                 Vec3 previous(std::cos(angle),std::sin(angle),0);
                 previous *= sign ? 1 : -1;
                 for (int step = 0; step < 1000; ++step) {
-                    if (!surface_point(surface, xy, point, n, d) || d < wall_band(p.process,layer))
+                    if (!surface_point(surface, xy, point, n, d,&scale) || d < wall_band(p.process,layer))
                         break;
                     if (step > 2 && near(xy, .7 * spacing))
                         break;
-                    halves[sign].push_back({point, n});
+                    halves[sign].push_back({point, n,scale});
                     Vec3 direction = previous;
                     if (!solid && p.process.infillPattern==InfillPattern::StressAligned && p.stress.directional) {
                         bool valid;
@@ -570,7 +590,7 @@ static void infill(Project &p, const Surface &surface, int layer, int &region, R
                     xy += previous.head<2>().normalized() * std::min(.6, width);
                 }
             }
-            std::vector<std::pair<Vec3, Vec3>> curve;
+            Curve curve;
             for (auto it = halves[0].rbegin(); it != halves[0].rend(); ++it)
                 curve.push_back(*it);
             if (!halves[1].empty())
@@ -675,6 +695,7 @@ void regenerate_joints(Project &p) {
     JointState previous;
     for (size_t i = 0; i < p.path.size(); ++i) {
         auto &s = p.path[i];
+        if(!p.machine.rotary_axes()) {if(!s.surfaceNormal)s.surfaceNormal=s.direction;s.direction=Vec3::UnitZ();}
         if(p.process.profileNormal && s.role!=Role::Support && s.region>=0)
             s.direction=profile_layer(p,s.layer).normal;
         double uprightCone = std::min(p.process.directionCone * .1, p.machine.angularTolerance * .25);
@@ -729,6 +750,10 @@ void refine_joint_motion(Project &p) {
             s.joint = interpolate_motion(p.machine, p.active_toolhead(), a.joint, b.joint, u);
             s.position = part_position(p.machine, s.joint);
             s.direction = part_direction(p.machine, p.active_toolhead(), s.joint);
+            if(!p.machine.rotary_axes()) {
+                s.surfaceNormal=(surface_normal(a)*(1-u)+surface_normal(b)*u).normalized();
+                if(b.deltaE>0 && a.deltaE>0 && a.layer==b.layer)s.height=a.height*(1-u)+b.height*u;
+            }
             s.deltaE = b.deltaE > 0
                            ? (s.position - refined.back().position).norm() * bead_area(b.width, b.height) /
                                  (pi * std::pow(p.machine.filamentDiameter / 2, 2))
@@ -783,7 +808,7 @@ void check_deposition(Project &p) {
         for (int j = 0; j < count; ++j) {
             double u = (j + .5) / count;
             JointState q = interpolate_motion(p.machine, p.active_toolhead(), a.joint, b.joint, u);
-            Vec3 point = part_position(p.machine, q), n = part_direction(p.machine, p.active_toolhead(), q);
+            Vec3 point = part_position(p.machine, q), n = p.machine.rotary_axes()?part_direction(p.machine,p.active_toolhead(),q):(surface_normal(a)*(1-u)+surface_normal(b)*u).normalized();
             Vec3 antiGravity = workpiece_pose(p.machine, q).linear().transpose() * Vec3::UnitZ();
             if (n.dot(antiGravity) < std::cos(p.process.maximumTilt) - 1e-6)
                 valid = false;
@@ -843,6 +868,7 @@ void slice_project(Project &p, std::atomic_bool *cancel, std::function<void(doub
     if (p.part.empty())
         throw std::runtime_error("Import a printable part first");
     validate_process(p.process);
+    if((p.process.nonPlanar3Axis && p.machine.rotary_axes()) || (p.process.profileNormal && !p.machine.rotary_axes()))throw std::runtime_error("Select a compatible machine layout for the requested slicing mode");
     if(p.active_toolhead().components.empty())
         throw std::runtime_error("Import a toolhead STEP or enable the dummy toolhead option");
     if(p.useDummyToolhead) p.diagnostics << "Dummy toolhead selected: collision results cover synthetic geometry only.";
@@ -904,7 +930,7 @@ void slice_project(Project &p, std::atomic_bool *cancel, std::function<void(doub
         }
         if(p.process.preciseZ && level-previousLevel<extrusion_height(p.process,layer)-1e-7) {
             double actual=level-previousLevel;
-            for(size_t i=begin;i<p.path.size();++i) { auto &s=p.path[i]; if(s.deltaE>0) s.deltaE*=bead_area(s.width,actual)/bead_area(s.width,s.height); s.height=actual; }
+            for(size_t i=begin;i<p.path.size();++i) { auto &s=p.path[i];double next=p.process.nonPlanar3Axis?s.height*actual/extrusion_height(p.process,layer):actual; if(s.deltaE>0)s.deltaE*=bead_area(s.width,next)/bead_area(s.width,s.height);s.height=next; }
         }
         previousLevel=level;
         if (progress)
@@ -918,12 +944,13 @@ void slice_project(Project &p, std::atomic_bool *cancel, std::function<void(doub
     p.pathProcessFingerprint=process_fingerprint(p.process);
     regenerate_joints(p);
     if(p.process.profileNormal && profile_motion_violation(p)>=0)throw std::runtime_error("Generated nozzle motion is not perpendicular to the profile");
+    if(!p.machine.rotary_axes() && cartesian_motion_violation(p)>=0)throw std::runtime_error("Three-axis paths exceed the fixed-nozzle or non-planar slope constraints");
     check_deposition(p);
     p.diagnostics << QString("%1 layers, %2 independently scheduled curves, %3 coordinated movements.")
                          .arg(layer)
                          .arg(region)
                          .arg(p.path.size());
-    p.diagnostics << (p.process.profileNormal?"Profile-normal slicing follows explicit cross-section planes in centerline arc order. Extrusion orientation is locked; deposition and collision checks remain required.":"Research scalar-field solver uses stress-weighted diffusion with bounded spacing; material behavior and strength require calibration.");
+    p.diagnostics << (p.process.nonPlanar3Axis?"Standard XYZ conformal layers retain a planar base, fixed upright nozzle and local field-based bead spacing. Slope, deposition and complete toolhead clearance checks remain required.":p.process.profileNormal?"Profile-normal slicing follows explicit cross-section planes in centerline arc order. Extrusion orientation is locked; deposition and collision checks remain required.":"Research scalar-field solver uses stress-weighted diffusion with bounded spacing; material behavior and strength require calibration.");
 }
 double stress_alignment(const Project &p) {
     double sum = 0, weight = 0;
