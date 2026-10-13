@@ -1,6 +1,7 @@
 #include "viewport.h"
 #include "core/compute.h"
 #include "core/geometry.h"
+#include "core/machine_settings.h"
 #include "core/motion_preview.h"
 #include "core/plate.h"
 #include "core/profile.h"
@@ -117,6 +118,8 @@ Viewport::Viewport(QWidget *parent) : QOpenGLWidget(parent) {
 Viewport::~Viewport() {
     if (isValid())
         makeCurrent();
+    bedTexture.reset();
+    textureBuffer.destroy();
     cache.clear();
     pathBuffer.destroy();
     if (isValid())
@@ -141,6 +144,12 @@ void Viewport::set_project(const Project *p) {
     if (isValid())
         makeCurrent();
     cache.clear();
+    bedTexture.reset();
+    textureBuffer.destroy();
+    textureVertices = 0;
+    bedImage =
+        p ? QImage::fromData(QByteArray::fromBase64(p->machine.printer["bedTexture"].toString().toLatin1()))
+          : QImage{};
     renderTools.clear();
     paintMeshes.clear();
     if (p && p->plateEnabled) {
@@ -205,7 +214,7 @@ void Viewport::set_project(const Project *p) {
     beadEnds.clear();
     if (p) {
         for (size_t i = 0; i < p->path.size(); ++i) {
-            if (i && p->path[i].deltaE > 0) {
+            if (i && p->path[i].deltaE > 0 && p->path[i].role != Role::Retract) {
                 auto &a = p->path[i - 1];
                 auto &b = p->path[i];
                 Vec3 delta = b.position - a.position;
@@ -440,6 +449,60 @@ void Viewport::initializeGL() {
                                  "light=0.38+0.62*abs(dot(normalize(N),normalize(vec3(-0.5,-0.3,1.0))));gl_"
                                  "FragColor=vec4(mix(color.rgb,C,useField)*mix(light,1.0,unlit),color.a);}");
     shader.link();
+    textureShader.addShaderFromSourceCode(
+        QOpenGLShader::Vertex, "attribute vec3 position; attribute vec2 uv; uniform mat4 mvp; varying vec2 "
+                               "tex; void main(){gl_Position=mvp*vec4(position,1.0);tex=uv;}");
+    textureShader.addShaderFromSourceCode(
+        QOpenGLShader::Fragment,
+        "uniform sampler2D image; varying vec2 tex; void main(){gl_FragColor=texture2D(image,tex);}");
+    textureShader.link();
+}
+void Viewport::draw_bed_texture(const Transform &pose) {
+    if (bedImage.isNull() || !project || !project->machine.printer["bedEnabled"].toBool())
+        return;
+    if (!bedTexture) {
+        auto mesh = printer_bed_mesh(project->machine.printer);
+        auto bounds = mesh.bounds();
+        std::vector<float> data;
+        for (auto triangle : mesh.triangles) {
+            bool top = true;
+            for (int index : triangle)
+                top &= std::abs(mesh.vertices[index].z()) < 1e-8;
+            if (!top)
+                continue;
+            for (int index : triangle) {
+                auto vertex = mesh.vertices[index];
+                data.insert(data.end(), {float(vertex.x()), float(vertex.y()), .03f,
+                                         float((vertex.x() - bounds.min().x()) / bounds.sizes().x()),
+                                         float((vertex.y() - bounds.min().y()) / bounds.sizes().y())});
+            }
+        }
+        bedTexture = std::make_unique<QOpenGLTexture>(bedImage.mirrored());
+        bedTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+        bedTexture->setMagnificationFilter(QOpenGLTexture::Linear);
+        bedTexture->setWrapMode(QOpenGLTexture::ClampToEdge);
+        textureBuffer.create();
+        textureBuffer.bind();
+        textureBuffer.allocate(data.data(), int(data.size() * sizeof(float)));
+        textureBuffer.release();
+        textureVertices = int(data.size() / 5);
+    }
+    textureShader.bind();
+    textureBuffer.bind();
+    bedTexture->bind(0);
+    textureShader.setUniformValue("mvp", view_projection() * qt_matrix(pose));
+    textureShader.setUniformValue("image", 0);
+    int position = textureShader.attributeLocation("position"), uv = textureShader.attributeLocation("uv");
+    textureShader.enableAttributeArray(position);
+    textureShader.enableAttributeArray(uv);
+    textureShader.setAttributeBuffer(position, GL_FLOAT, 0, 3, 5 * sizeof(float));
+    textureShader.setAttributeBuffer(uv, GL_FLOAT, 3 * sizeof(float), 2, 5 * sizeof(float));
+    glDrawArrays(GL_TRIANGLES, 0, textureVertices);
+    textureShader.disableAttributeArray(position);
+    textureShader.disableAttributeArray(uv);
+    bedTexture->release();
+    textureBuffer.release();
+    textureShader.release();
 }
 void Viewport::resizeGL(int w, int h) {
     glViewport(0, 0, w, h);
@@ -562,6 +625,7 @@ void Viewport::paintGL() {
     Transform bed = workpiece_pose(project->machine, prepare ? JointState{} : state.joint);
     for (auto &f : project->fixtures)
         draw_mesh(f.mesh, f.movesWithBed ? bed : Transform::Identity(), QVector4D(.18, .23, .29, 1));
+    draw_bed_texture(bed);
     // A metric grid is a visual reference. Fixtures in the scene define the physical bed.
     for (int i = -80; i <= 80; i += 10)
         for (int axis = 0; axis < 2; ++axis) {

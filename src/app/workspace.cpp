@@ -143,7 +143,9 @@ void MainWindow::refresh_preview(bool preserveRange) {
         if (role >= 0 && role < role_count) {
             times[role] += i ? std::max(0.0, s.time - p.path[i - 1].time) : 0;
             double length =
-                s.event == EventKind::Load || s.event == EventKind::Unload ? 0 : std::max(0.0, s.deltaE);
+                s.event == EventKind::Load || s.event == EventKind::Unload || s.role == Role::Retract
+                    ? 0
+                    : std::max(0.0, s.deltaE);
             extrusion[role] += length;
             const auto *material = p.plateEnabled ? find_material(p, s.materialId) : nullptr;
             double diameter = material ? material->diameter : p.machine.filamentDiameter,

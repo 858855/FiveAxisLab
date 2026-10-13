@@ -1,6 +1,7 @@
 #include "slicing.h"
 #include "compute.h"
 #include "geometry.h"
+#include "machine_settings.h"
 #include "nonplanar.h"
 #include "plate.h"
 #include "process.h"
@@ -1001,7 +1002,7 @@ void check_deposition(Project &p) {
     for (size_t i = 1; i < p.path.size(); ++i) {
         auto &a = p.path[i - 1];
         auto &b = p.path[i];
-        if (b.deltaE <= 0)
+        if (b.deltaE <= 0 || b.role == Role::Retract)
             continue;
         bool valid = true;
         double length = (b.position - a.position).norm();
@@ -1203,6 +1204,7 @@ void slice_project(Project &p, std::atomic_bool *cancel, std::function<void(doub
     support_columns(p);
     p.pathProcessFingerprint = process_fingerprint(p.process);
     regenerate_joints(p);
+    apply_printer_path(p);
     if (p.process.profileNormal && profile_motion_violation(p) >= 0)
         throw std::runtime_error("Generated nozzle motion is not perpendicular to the profile");
     if (!p.machine.rotary_axes() && cartesian_motion_violation(p) >= 0)

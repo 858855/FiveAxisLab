@@ -1,10 +1,12 @@
 #pragma once
 #include "core/types.h"
+#include <QImage>
 #include <QLabel>
 #include <QMatrix4x4>
 #include <QOpenGLBuffer>
 #include <QOpenGLFunctions>
 #include <QOpenGLShaderProgram>
+#include <QOpenGLTexture>
 #include <QOpenGLWidget>
 #include <QPoint>
 #include <array>
@@ -111,6 +113,12 @@ class Viewport : public QOpenGLWidget, protected QOpenGLFunctions {
     const fiveaxis::Project *project = nullptr;
     fiveaxis::SimulationState state;
     QOpenGLShaderProgram shader;
+    QOpenGLShaderProgram textureShader;
+    QOpenGLBuffer textureBuffer;
+    std::unique_ptr<QOpenGLTexture> bedTexture;
+    QImage bedImage;
+    int textureVertices = 0;
+    void draw_bed_texture(const fiveaxis::Transform &pose);
     double time = 0, yaw = -55, pitch = 30, distance = 110;
     fiveaxis::Vec3 target = fiveaxis::Vec3(0, 0, 8);
     QPoint last, pressed;

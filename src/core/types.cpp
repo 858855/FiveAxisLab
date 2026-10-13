@@ -1,4 +1,5 @@
 #include "types.h"
+#include "machine_settings.h"
 #include "plate.h"
 #include <QCryptographicHash>
 #include <QJsonDocument>
@@ -283,6 +284,12 @@ void time_path(Project &p) {
                               2 * std::sqrt(angle / p.machine.angularAccel), 0.001});
         double volume = std::max(0.0, b.deltaE) * pi * std::pow(p.machine.filamentDiameter / 2, 2);
         dt = std::max(dt, volume / p.machine.maxFlow);
+        dt = std::max(dt, b.dwell);
+        dt = std::max(dt,
+                      printer_move_seconds(p.machine,
+                                           controller_axes(p.machine, p.active_toolhead(), b.joint).xyz -
+                                               controller_axes(p.machine, p.active_toolhead(), a.joint).xyz,
+                                           b.deltaE, p.machine.printer.value("extruder").toObject()));
         b.time = a.time + dt;
     }
 }
@@ -303,7 +310,7 @@ SimulationState simulation_at(const Project &p, double time, bool rebuildDeposit
     s.joint = interpolate_motion(p.machine, p.active_toolhead(), p.path[previous].joint, p.path[next].joint,
                                  s.fraction);
     for (int i = 1; rebuildDeposition && i <= next; ++i)
-        if (p.path[i].deltaE > 0) {
+        if (p.path[i].deltaE > 0 && p.path[i].role != Role::Retract) {
             Vec3 end = p.path[i].position;
             if (i == next)
                 end = part_position(p.machine, s.joint);

@@ -1,3 +1,4 @@
+#include "app/machine_dialog.h"
 #include "app/main_window.h"
 #include "app/plate_editor.h"
 #include "app/step_dialog.h"
@@ -11,11 +12,15 @@
 #include "core/slicing.h"
 #include "core/step_import.h"
 #include <QAction>
+#include <QBuffer>
+#include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QJsonArray>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QSurfaceFormat>
@@ -23,12 +28,151 @@
 #include <QTableWidget>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QToolButton>
 #include <QtTest/QtTest>
 
 using namespace fiveaxis;
 class DesktopTests : public QObject {
     Q_OBJECT
   private Q_SLOTS:
+    void initTestCase() {
+        QApplication::setStyle("Fusion");
+    }
+    void bed_texture_preview() {
+        auto p = demo_project();
+        p.machine.printer = {{"bedEnabled", true},
+                             {"bedWidth", 100},
+                             {"bedDepth", 100},
+                             {"bedOriginX", 50},
+                             {"bedOriginY", 50}};
+        QImage texture(64, 64, QImage::Format_RGB32);
+        texture.fill(QColor(250, 90, 160));
+        QByteArray bytes;
+        QBuffer buffer(&bytes);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(texture.save(&buffer, "PNG"));
+        p.machine.printer["bedTexture"] = QString::fromLatin1(bytes.toBase64());
+        Viewport preview;
+        preview.resize(800, 600);
+        preview.set_project(&p);
+        preview.set_prepare(true);
+        preview.show();
+        preview.fit();
+        QTest::qWait(500);
+        QVERIFY(preview.isValid());
+        auto image = preview.grabFramebuffer();
+        int colored = 0;
+        for (int y = 0; y < image.height(); y += 5)
+            for (int x = 0; x < image.width(); x += 5) {
+                auto color = image.pixelColor(x, y);
+                colored +=
+                    color.red() > 235 && color.green() < 110 && color.blue() > 140 && color.blue() < 180;
+            }
+        QVERIFY(colored > 50);
+        QVERIFY(preview.grab().save("E:/Slicer/examples/reports/machine-bed-texture.png"));
+    }
+    void machine_settings_layout_and_save() {
+        auto p = plate_demo();
+        p.tools[0].nozzle.diameter = .4;
+        p.tools[0].dummy = make_dummy_toolhead(.4);
+        p.tools[0].nozzle.geometryHash = p.tools[0].dummy.sourceHash;
+        bool inspected = false;
+        QTimer deadline;
+        deadline.setSingleShot(true);
+        connect(&deadline, &QTimer::timeout, this, [&] {
+            if (auto message = qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+                auto parent = qobject_cast<QDialog *>(message->parentWidget());
+                QWARN(qPrintable(message->text()));
+                message->reject();
+                if (parent)
+                    parent->reject();
+            } else if (auto dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget()))
+                dialog->reject();
+        });
+        deadline.start(15000);
+        QTimer::singleShot(300, [&] {
+            auto dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            QVERIFY(dialog);
+            auto tabs = dialog->findChild<QTabWidget *>("machineSettingsTabs");
+            auto advanced = dialog->findChild<QCheckBox *>("machineAdvanced");
+            QVERIFY(tabs && advanced);
+            QCOMPARE(tabs->count(), 7);
+            QVERIFY(!tabs->isTabVisible(1));
+            QVERIFY(tabs->isTabVisible(0) && tabs->isTabVisible(2) && tabs->isTabVisible(3));
+            QVERIFY(dialog->grab().save("E:/Slicer/examples/reports/machine-basic.png"));
+            advanced->setChecked(true);
+            tabs->setCurrentIndex(0);
+            QTest::qWait(100);
+            QVERIFY(tabs->isTabVisible(1) && tabs->isTabVisible(5));
+            QVERIFY(dialog->grab().save("E:/Slicer/examples/reports/machine-advanced.png"));
+            tabs->setCurrentIndex(2);
+            QTest::qWait(100);
+            QVERIFY(dialog->grab().save("E:/Slicer/examples/reports/machine-motion.png"));
+            dialog->findChild<QDoubleSpinBox *>("speedZ")->setValue(7);
+            tabs->setCurrentIndex(3);
+            QTest::qWait(100);
+            auto diameter = dialog->findChild<QDoubleSpinBox *>("machineNozzleDiameter");
+            QVERIFY(diameter);
+            diameter->setValue(.6);
+            diameter->setValue(.8);
+            QCOMPARE(dialog->findChild<QDoubleSpinBox *>("machineMinBeadHeight")->value(), .4);
+            QCOMPARE(dialog->findChild<QDoubleSpinBox *>("machineMaxBeadWidth")->value(), 1.6);
+            dialog->findChild<QDoubleSpinBox *>("machineMinBeadHeight")->setValue(.2);
+            QVERIFY(dialog->grab().save("E:/Slicer/examples/reports/machine-extruder.png"));
+            tabs->setCurrentIndex(1);
+            dialog->findChild<QPlainTextEdit *>("gcode_start")->setPlainText("G4 P200\nM400");
+            QTest::qWait(100);
+            QVERIFY(dialog->grab().save("E:/Slicer/examples/reports/machine-gcode.png"));
+            dialog->findChild<QPlainTextEdit *>("machineNotes")->setPlainText("User calibration notes");
+            tabs->setCurrentIndex(5);
+            QTest::qWait(100);
+            QVERIFY(dialog->grab().save("E:/Slicer/examples/reports/machine-axes.png"));
+            tabs->setCurrentIndex(0);
+            dialog->findChild<QToolButton *>("machineSearchButton")->click();
+            dialog->findChild<QLineEdit *>("machineSearch")->setText("Minimum local bead");
+            QCOMPARE(tabs->currentIndex(), 3);
+            dialog->resize(860, 600);
+            QTest::qWait(100);
+            QVERIFY(dialog->grab().save("E:/Slicer/examples/reports/machine-compact.png"));
+            dialog->findChild<QLineEdit *>("machineSearch")->clear();
+            dialog->resize(1140, 900);
+            tabs->setCurrentIndex(0);
+            auto bed = dialog->findChild<QPushButton *>("editBedShape");
+            QVERIFY(bed);
+            QTimer::singleShot(100, [&] {
+                auto bedDialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                QVERIFY(bedDialog);
+                QCOMPARE(bedDialog->objectName(), "bedShapeDialog");
+                bedDialog->findChild<QComboBox *>("bedShape")->setCurrentIndex(1);
+                bedDialog->findChild<QDoubleSpinBox *>("bedWidth")->setValue(200);
+                bedDialog->findChild<QDoubleSpinBox *>("bedOriginX")->setValue(100);
+                bedDialog->findChild<QDoubleSpinBox *>("bedOriginY")->setValue(100);
+                QTest::qWait(100);
+                QVERIFY(bedDialog->grab().save("E:/Slicer/examples/reports/machine-bed.png"));
+                bedDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
+            });
+            bed->click();
+            inspected = true;
+            dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Save)->click();
+        });
+        QVERIFY(edit_machine(p, nullptr));
+        QVERIFY(inspected);
+        QCOMPARE(p.machine.printer["notes"].toString(), QString("User calibration notes"));
+        QCOMPARE(p.machine.printer["speedZ"].toDouble(), 7.0);
+        QCOMPARE(p.machine.printer["bedShape"].toString(), QString("circle"));
+        QCOMPARE(p.machine.printer["bedDepth"].toDouble(), 200.0);
+        QCOMPARE(p.tools[0].nozzle.diameter, .8);
+        QCOMPARE(p.tools[0].nozzle.minHeight, .2);
+        QVERIFY(!p.tools[0].nozzle.calibrated);
+        QVERIFY(!p.report.exportable());
+        auto original = p.fingerprint();
+        QTimer::singleShot(100, [&] {
+            if (auto dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget()))
+                dialog->reject();
+        });
+        QVERIFY(!edit_machine(p, nullptr));
+        QCOMPARE(p.fingerprint(), original);
+    }
     void nozzle_limits_auto_fill_and_override() {
         auto p = plate_demo();
         p.tools[0].detachable = true;

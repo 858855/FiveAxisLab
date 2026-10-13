@@ -1,4 +1,5 @@
 #include "controllers.h"
+#include "machine_settings.h"
 #include "plate.h"
 #include "project.h"
 #include <QJsonArray>
@@ -74,6 +75,7 @@ static QString state_command(const Project &p, const Sample &s) {
     }
 }
 QString export_plate_gcode(const Project &p) {
+    check_printer_envelope(p);
     need(p.report.exportable() && p.report.fingerprint == p.fingerprint() && p.depositionValid,
          "Export blocked: validate complete plate, deposition and tool changes");
     need(p.path.size() > 1, "No plate trajectory");
@@ -95,7 +97,9 @@ QString export_plate_gcode(const Project &p) {
     out.setRealNumberNotation(QTextStream::FixedNotation);
     out.setRealNumberPrecision(9);
     out << "; FiveAxisLab plate job schema 2\n; Fingerprint " << p.fingerprint()
-        << "\n; Carriage coordinates: firmware tool XYZ offsets must be zero.\nG21\nG90\nM83\n";
+        << "\n; Carriage coordinates: firmware tool XYZ offsets must be zero.\nG21\nG90\n"
+        << (relative_extrusion(p.machine) ? "M83\n" : "M82\nG92 E0\n");
+    double absoluteE = 0;
     if (p.machine.controller == Controller::Duet)
         for (const auto &tool : p.tools)
             out << "G10 P" << tool.controllerTool << " X0 Y0 Z0\nM572 D" << tool.duetDrive << " S0\n";
@@ -170,7 +174,9 @@ QString export_plate_gcode(const Project &p) {
             out << "G1 X" << y.xyz.x() << " Y" << y.xyz.y() << " Z" << y.xyz.z();
             if (p.machine.rotary_axes())
                 out << " A" << y.a * 180 / pi << " " << p.machine.axis2() << y.b * 180 / pi;
-            out << " E" << b.deltaE << " F" << metric / duration * 60 << "\n";
+            absoluteE += b.deltaE;
+            out << " E" << (relative_extrusion(p.machine) ? b.deltaE : absoluteE) << " F"
+                << metric / duration * 60 << "\n";
         }
         out << ";FAL_END\n";
     }
@@ -210,7 +216,7 @@ Project replay_plate_gcode(const Project &context, const QString &code) {
     QString active = context.path.front().toolId, material = context.path.front().materialId;
     QJsonObject meta;
     QStringList commands;
-    double elapsed = 0;
+    double elapsed = 0, absoluteE = 0;
     bool frame = false;
     auto finish = [&] {
         need(frame, "Unexpected frame terminator");
@@ -310,7 +316,8 @@ Project replay_plate_gcode(const Project &context, const QString &code) {
             } else
                 need(!values.count("A") && !values.count("B") && !values.count("C"),
                      "Rotary command in XYZ replay");
-            sample.deltaE = values["E"];
+            sample.deltaE = relative_extrusion(context.machine) ? values["E"] : values["E"] - absoluteE;
+            absoluteE += sample.deltaE;
             need(values.count("F") && values["F"] > 0, "Missing feedrate");
             dt += feed_metric(context.machine, axes, next, sample.deltaE) / (values["F"] / 60);
         }

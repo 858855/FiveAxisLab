@@ -1,6 +1,7 @@
 #include "collision.h"
 #include "compute.h"
 #include "geometry.h"
+#include "machine_settings.h"
 #include "nonplanar.h"
 #include "plate.h"
 #include "profile.h"
@@ -33,7 +34,7 @@ static Project collision_view(const Project &p, const QString &active) {
     return view;
 }
 static bool deposited(const Sample &s) {
-    return s.deltaE > 0 && s.event == EventKind::Motion;
+    return s.deltaE > 0 && s.event == EventKind::Motion && s.role != Role::Retract;
 }
 static void deposit_interval(CollisionScene &scene, const Project &p, size_t i) {
     const auto &a = p.path[i - 1], &b = p.path[i];
@@ -59,6 +60,7 @@ CollisionReport validate_plate_motion(const Project &p, std::atomic_bool *cancel
     report.status = Status::Clear;
     try {
         validate_plate_setup(p);
+        check_printer_envelope(p);
     } catch (const std::exception &e) {
         report.status = Status::Unresolved;
         report.events.push_back({Status::Unresolved, "Plate setup", "Profiles", QString::fromUtf8(e.what())});
@@ -160,7 +162,7 @@ CollisionReport validate_plate_motion(const Project &p, std::atomic_bool *cancel
                 }
             }
         }
-        if (s.deltaE > 0 && s.event == EventKind::Motion) {
+        if (deposited(s)) {
             auto t = find_tool(p, s.toolId);
             auto m = find_material(p, s.materialId);
             if (!t || !m) {

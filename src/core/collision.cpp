@@ -1,6 +1,7 @@
 #include "collision.h"
 #include "compute.h"
 #include "geometry.h"
+#include "machine_settings.h"
 #include "nonplanar.h"
 #include "plate.h"
 #include "process.h"
@@ -691,6 +692,14 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
         return validate_plate_motion(p, cancel, progress);
     r.fingerprint = p.fingerprint();
     r.status = Status::Clear;
+    try {
+        check_printer_envelope(p);
+    } catch (const std::exception &e) {
+        r.status = Status::Unresolved;
+        r.events.push_back(
+            {Status::Unresolved, "Printer settings", "Printable area", QString::fromUtf8(e.what())});
+        return r;
+    }
     if ((p.machine.controller == Controller::GenericMarlin && p.machine.rotary_axes()) ||
         (p.process.nonPlanar3Axis && p.machine.rotary_axes()) ||
         (!p.machine.rotary_axes() && cartesian_motion_violation(p) >= 0)) {
@@ -717,7 +726,8 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
             return r;
         }
     }
-    if (!p.pathProcessFingerprint.isEmpty() && p.pathProcessFingerprint != process_fingerprint(p.process)) {
+    if ((!p.pathProcessFingerprint.isEmpty() || !p.machine.printer.isEmpty()) &&
+        p.pathProcessFingerprint != printer_path_signature(p)) {
         r.status = Status::Unresolved;
         r.events.push_back({Status::Unresolved, "Print process", "Stale toolpaths",
                             "Process settings changed; slice again to generate matching motion"});
@@ -818,7 +828,7 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
             } else
                 scene.check_interval(x, y, b.deltaE > 0, pa, pb, int(i), a.time + (b.time - a.time) * u,
                                      a.time + (b.time - a.time) * v, r, cancel);
-            if (b.deltaE > 0)
+            if (b.deltaE > 0 && b.role != Role::Retract)
                 scene.deposit(
                     pa, pb, b.width, b.height, b.role,
                     p.machine.rotary_axes()

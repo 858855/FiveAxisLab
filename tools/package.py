@@ -70,7 +70,7 @@ def main():
             for p in (ROOT/directory).rglob('*'):
                 if p.is_file() and not any(x in p.parts for x in ['__pycache__','.git','out']) and p.suffix not in ['.dll','.so','.o'] and (p.suffix!='.obj' or directory=='examples'):
                     z.write(p,'FiveAxisLab/'+str(p.relative_to(ROOT)))
-        for filename in ['CMakeLists.txt','LICENSE','README.md','THIRD_PARTY.md','dependencies.lock.json','upstream.lock.json','.gitignore','.gitattributes','.clang-format']:
+        for filename in ['CMakeLists.txt','LICENSE','README.md','THIRD_PARTY.md','dependencies.lock.json','upstream.lock.json','.gitignore','.gitattributes','.clang-format','design-qa.md']:
             z.write(ROOT/filename,'FiveAxisLab/'+filename)
     print(json.dumps({'runtimeFiles':len(hashes),'portableZip':str(archive),'sourceZip':str(sourceArchive)},indent=2))
 

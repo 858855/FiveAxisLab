@@ -2,6 +2,7 @@
 #include "collision.h"
 #include "compute.h"
 #include "geometry.h"
+#include "machine_settings.h"
 #include "process.h"
 #include "project.h"
 #include "slicing.h"
@@ -933,7 +934,10 @@ struct Planner {
             recipe(incoming->change.pickup);
             active = toolId;
             state(EventKind::Attach, toolId);
-            state(EventKind::Confirm, toolId, incoming->change.changeSeconds);
+            state(EventKind::Confirm, toolId,
+                  std::max(incoming->change.changeSeconds,
+                           printer_number(p.machine.printer, "extruderChangeSeconds", 0) +
+                               printer_number(p.machine.printer, "hotendChangeSeconds", 0)));
         }
         if (previousLoaded.isEmpty())
             previousLoaded = incoming->routes.front().materialId;
@@ -949,7 +953,7 @@ struct Planner {
             auto s = current();
             s.deltaE = -incoming->change.unload;
             s.event = EventKind::Unload;
-            s.dwell = 1;
+            s.dwell = std::max(1.0, printer_number(p.machine.printer, "unloadSeconds", 0));
             add(s);
         }
         material = materialId;
@@ -963,7 +967,7 @@ struct Planner {
             auto s = current();
             s.deltaE = incoming->change.load;
             s.event = EventKind::Load;
-            s.dwell = 1;
+            s.dwell = std::max(1.0, printer_number(p.machine.printer, "loadSeconds", 0));
             s.argument = "feeder";
             add(s);
         }
@@ -1000,6 +1004,9 @@ void time_plate(Project &p) {
             if (auto t = find_tool(p, b.toolId))
                 dt = std::max(dt, std::abs(b.deltaE) * pi * std::pow(m->diameter / 2, 2) /
                                       std::min(m->maxFlow, t->nozzle.maxFlow));
+        auto tool = find_tool(p, b.toolId);
+        dt = std::max(dt, printer_move_seconds(p.machine, y.xyz - x.xyz, b.deltaE,
+                                               tool ? tool->extruderSettings : QJsonObject{}));
         b.time = a.time + dt;
     }
     rebuild_job_events(p);
@@ -1014,6 +1021,7 @@ void rebuild_job_events(Project &p) {
 }
 void slice_plate(Project &p, std::atomic_bool *cancel, std::function<void(double)> progress) {
     validate_plate_setup(p);
+    validate_printer_settings(p.machine);
     p.invalidate();
     p.path.clear();
     p.events.clear();
@@ -1028,6 +1036,9 @@ void slice_plate(Project &p, std::atomic_bool *cancel, std::function<void(double
             auto &o = p.objects[i];
             Project child;
             child.machine = p.machine;
+            // Printer hooks/retraction are scheduled once across the complete plate.
+            child.machine.printer.remove("gcode");
+            child.machine.printer.remove("extruder");
             child.process = o.inheritProcess ? p.process : o.process;
             child.part = o.mesh;
             child.part.vertices =
@@ -1225,6 +1236,7 @@ void slice_plate(Project &p, std::atomic_bool *cancel, std::function<void(double
         }
     }
     synchronize_plate_preview(p);
+    apply_printer_path(p);
     time_plate(p);
     p.computation = compute.front();
     p.computation.milliseconds = timer.nsecsElapsed() / 1e6;
@@ -1255,7 +1267,7 @@ SimulationState simulate_plate(const Project &p, double time, bool rebuild) {
             state.parkedTools.push_back(tool.id);
     std::map<QString, int> last;
     for (size_t i = 0; i < p.path.size(); ++i)
-        if (p.path[i].deltaE > 0 && p.path[i].role != Role::Purge)
+        if (p.path[i].deltaE > 0 && p.path[i].role != Role::Purge && p.path[i].role != Role::Retract)
             last[p.path[i].objectId] = int(i);
     for (const auto &[id, index] : last)
         if (index < next || (index == next && state.fraction >= 1))
@@ -1263,7 +1275,7 @@ SimulationState simulate_plate(const Project &p, double time, bool rebuild) {
     for (int i = 1; i <= next; ++i) {
         const auto &s = p.path[i];
         double fraction = i == next ? state.fraction : 1;
-        if (s.deltaE > 0 && s.event != EventKind::Load) {
+        if (s.deltaE > 0 && s.event != EventKind::Load && s.role != Role::Retract) {
             state.filamentUsed[s.materialId] += s.deltaE * fraction;
             if (s.role == Role::Purge)
                 state.purgeUsed[s.materialId] += s.deltaE * fraction;

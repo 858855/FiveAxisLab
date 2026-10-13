@@ -1,5 +1,6 @@
 #include "controllers.h"
 #include "collision.h"
+#include "machine_settings.h"
 #include "nonplanar.h"
 #include "plate.h"
 #include "profile.h"
@@ -25,6 +26,7 @@ double feed_metric(const MachineProfile &m, const JointState &a, const JointStat
 QString export_gcode(const Project &p) {
     if (p.plateEnabled)
         return export_plate_gcode(p);
+    check_printer_envelope(p);
     if ((p.machine.controller == Controller::GenericMarlin && p.machine.rotary_axes()) ||
         (p.process.nonPlanar3Axis && p.machine.rotary_axes()) ||
         (!p.machine.rotary_axes() && cartesian_motion_violation(p) >= 0))
@@ -52,7 +54,9 @@ QString export_gcode(const Project &p) {
         {"initial", setup["path"].toArray().first()},
         {"initialCarriage", QJsonArray{initialAxes.xyz.x(), initialAxes.xyz.y(), initialAxes.xyz.z()}}};
     stream << "; FIVEAXIS_METADATA " << QJsonDocument(metadata).toJson(QJsonDocument::Compact).toBase64()
-           << "\nG21\nG90\nM83\n";
+           << "\nG21\nG90\n"
+           << (relative_extrusion(p.machine) ? "M83\n" : "M82\nG92 E0\n");
+    double absoluteE = 0;
     if (p.machine.controller == Controller::Duet)
         stream << "M572 D0 S0\n";
     else if (p.machine.controller == Controller::Klipper && p.machine.rotary_axes()) {
@@ -86,8 +90,10 @@ QString export_gcode(const Project &p) {
         auto axesA = controller_axes(p.machine, p.active_toolhead(), a.joint),
              axesB = controller_axes(p.machine, p.active_toolhead(), b.joint);
         double metric = feed_metric(p.machine, axesA, axesB, b.deltaE), duration = b.time - a.time;
-        if (metric < 1e-12)
+        if (metric < 1e-12) {
+            stream << "G4 P" << duration * 1000 << "\n";
             continue;
+        }
         if (duration <= 0)
             throw std::runtime_error("Invalid movement duration");
         if (p.machine.controller == Controller::Klipper &&
@@ -107,7 +113,9 @@ QString export_gcode(const Project &p) {
         stream << "\nG1 X" << axesB.xyz.x() << " Y" << axesB.xyz.y() << " Z" << axesB.xyz.z();
         if (p.machine.rotary_axes())
             stream << " A" << b.joint.a * 180 / pi << " " << p.machine.axis2() << b.joint.b * 180 / pi;
-        stream << " E" << b.deltaE << " F" << metric / duration * 60 << "\n";
+        absoluteE += b.deltaE;
+        stream << " E" << (relative_extrusion(p.machine) ? b.deltaE : absoluteE) << " F"
+               << metric / duration * 60 << "\n";
     }
     stream << "M400\n";
     if (p.machine.controller == Controller::Klipper && p.machine.klipperExtension && p.machine.rotary_axes())
@@ -139,7 +147,7 @@ Project replay_gcode(const Project &context, const QString &gcode) {
     std::optional<Vec3> surfaceNormal;
     auto parse = [](const QString &line) {
         std::map<QString, double> values;
-        QRegularExpression re("([XYZABCEF])\\s*([-+]?(?:[0-9]*\\.)?[0-9]+(?:[eE][-+]?[0-9]+)?)");
+        QRegularExpression re("([XYZABCEFPS])\\s*([-+]?(?:[0-9]*\\.)?[0-9]+(?:[eE][-+]?[0-9]+)?)");
         auto it = re.globalMatch(line);
         while (it.hasNext()) {
             auto match = it.next();
@@ -189,6 +197,21 @@ Project replay_gcode(const Project &context, const QString &gcode) {
             relativeE = false;
             continue;
         }
+        if (command == "G92" && line == "G92 E0") {
+            absoluteExtrusion = 0;
+            continue;
+        }
+        if (command == "G4") {
+            auto values = parse(line);
+            double dt = values.count("P") ? values["P"] / 1000 : values["S"];
+            auto sample = p.path.back();
+            sample.deltaE = 0;
+            sample.time += dt;
+            sample.role = Role::Travel;
+            sample.dwell = dt;
+            p.path.push_back(sample);
+            continue;
+        }
         if (command == "G21" || command == "M400" || command == "M572" || command == "SET_PRESSURE_ADVANCE" ||
             command == "MANUAL_STEPPER" || command == "FIVEAXIS_ENABLE" || command == "FIVEAXIS_DISABLE")
             continue;
@@ -235,7 +258,7 @@ Project replay_gcode(const Project &context, const QString &gcode) {
     return p;
 }
 QString controller_template(const Project &p) {
-    auto text = controller_template(p.machine);
+    auto text = controller_template(p.machine) + printer_controller_template(p.machine);
     if (!p.plateEnabled)
         return text;
     bool klipper = p.machine.controller == Controller::Klipper,

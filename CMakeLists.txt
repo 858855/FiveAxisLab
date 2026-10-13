@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(FiveAxisLab VERSION 0.4.1 LANGUAGES C CXX)
+project(FiveAxisLab VERSION 0.4.2 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Compatibility for pinned upstream releases")
@@ -41,7 +41,7 @@ add_library(fiveaxis_core STATIC
  src/core/types.cpp src/core/geometry.cpp src/core/step_import.cpp
  src/core/stress.cpp src/core/slicing.cpp src/core/collision.cpp
  src/core/controllers.cpp src/core/project.cpp src/core/orca_adapter.cpp src/core/process.cpp src/core/motion_preview.cpp src/core/profile.cpp src/core/nonplanar.cpp
- src/core/plate.cpp src/core/plate_collision.cpp src/core/plate_controllers.cpp src/core/compute.cpp)
+ src/core/machine_settings.cpp src/core/plate.cpp src/core/plate_collision.cpp src/core/plate_controllers.cpp src/core/compute.cpp)
 target_include_directories(fiveaxis_core PUBLIC src ${OpenCASCADE_INCLUDE_DIR} vendor/fcl/include
  "${CMAKE_CURRENT_BINARY_DIR}/vendor/fcl/include" vendor/ompl/src "${CMAKE_CURRENT_BINARY_DIR}/vendor/ompl/src")
 target_link_libraries(fiveaxis_core PUBLIC Qt6::Core Eigen3::Eigen fcl ompl PRIVATE
@@ -58,7 +58,7 @@ if(MSVC)
 else()
  target_compile_options(fiveaxis_core PRIVATE -Wall -Wextra -Wno-deprecated-declarations)
 endif()
-set(DESKTOP_SOURCES src/app/main_window.cpp src/app/process_dialog.cpp src/app/process_editor.cpp src/app/workspace.cpp src/app/step_dialog.cpp src/app/axis_preview.cpp src/app/plate_editor.cpp src/app/viewport.cpp src/app/resources.qrc)
+set(DESKTOP_SOURCES src/app/main_window.cpp src/app/process_dialog.cpp src/app/process_editor.cpp src/app/workspace.cpp src/app/step_dialog.cpp src/app/axis_preview.cpp src/app/plate_editor.cpp src/app/machine_dialog.cpp src/app/toolhead_dialog.cpp src/app/viewport.cpp src/app/resources.qrc)
 add_executable(FiveAxisLab WIN32 src/app/main.cpp ${DESKTOP_SOURCES})
 target_link_libraries(FiveAxisLab PRIVATE fiveaxis_core Qt6::Widgets Qt6::OpenGLWidgets Qt6::Concurrent)
 add_executable(fiveaxis_cli src/cli/main.cpp)
@@ -102,3 +102,7 @@ add_executable(plate_tests tests/plate_tests.cpp)
 target_link_libraries(plate_tests PRIVATE fiveaxis_core Qt6::Test)
 add_test(NAME plate COMMAND plate_tests)
 set_tests_properties(plate PROPERTIES ENVIRONMENT "TMP=${CMAKE_BINARY_DIR}/tmp;TEMP=${CMAKE_BINARY_DIR}/tmp")
+add_executable(machine_tests tests/machine_tests.cpp)
+target_link_libraries(machine_tests PRIVATE fiveaxis_core Qt6::Test)
+add_test(NAME machine COMMAND machine_tests)
+set_tests_properties(machine PROPERTIES ENVIRONMENT "TMP=${CMAKE_BINARY_DIR}/tmp;TEMP=${CMAKE_BINARY_DIR}/tmp")

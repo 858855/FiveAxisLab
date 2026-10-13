@@ -107,6 +107,8 @@ struct JointState {
     double a = 0, b = 0;
 };
 struct MachineProfile {
+    // Optional printer-editor settings. Omitted from old projects to preserve their certificates.
+    QJsonObject printer;
     Layout layout = Layout::RotaryBed;
     Controller controller = Controller::Duet;
     Vec3 bedPivot = Vec3::Zero(), headPivotA = Vec3(0, 0, 30), headPivotB = Vec3(0, 0, 15);
@@ -211,6 +213,7 @@ struct FilamentRoute {
     bool confirmed = false;
 };
 struct ToolDefinition {
+    QJsonObject extruderSettings;
     QString id, name, extruder = "extruder", heater = "extruder";
     int controllerTool = 0;
     int duetDrive = 0, duetHeater = 0;

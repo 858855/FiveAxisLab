@@ -1,10 +1,12 @@
-# FiveAxisLab 0.4.1
+# FiveAxisLab 0.4.2
 
 Independent C++17 / Qt 6 / OpenGL research application for five-axis FFF. Windows x64 portable build, shared headless core, AGPL-3.0-or-later. This is an initial research implementation, with remaining qualification work recorded in [docs/VALIDATION.md](docs/VALIDATION.md).
 
+Version 0.4.2 rebuilds **Machine setup** around the supplied Orca printer-settings screenshots, with printer profiles, Basic/Advanced tabs, bed shapes and exclusions, per-axis motion limits, per-tool nozzle/retraction settings, modeled G-code hooks, STEP calibration and collision controls. See [Machine setup](docs/MACHINE_SETUP.md).
+
 ## Run
 
-Extract the locally packaged `dist/FiveAxisLab-0.4.1-win64.zip` and run `FiveAxisLab.exe`. No SDK or Python is needed to run the packaged desktop app. The portable folder also contains `fiveaxis_cli.exe`, example projects, CAD fixtures, optional GPU backends, controller integration, dependency notices and validation reports. Binary packages and the SDK are excluded from Git; a fresh clone can produce them using the build instructions below.
+Extract the locally packaged `dist/FiveAxisLab-0.4.2-win64.zip` and run `FiveAxisLab.exe`. No SDK or Python is needed to run the packaged desktop app. The portable folder also contains `fiveaxis_cli.exe`, example projects, CAD fixtures, optional GPU backends, controller integration, dependency notices and validation reports. Binary packages and the SDK are excluded from Git; a fresh clone can produce them using the build instructions below.
 
 Version 0.4.1 adds automatic bead-limit filling in **Plate / tools → Tools and nozzles**: changing nozzle diameter fills both height and width with a minimum of half the diameter and a maximum of twice the diameter (0.8 mm → 0.4–1.6 mm). All limits remain editable; disable auto-fill to keep custom limits through later diameter changes. The preference and values are saved per tool. Opening an existing project preserves its stored limits.
 

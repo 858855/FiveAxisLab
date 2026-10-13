@@ -1,5 +1,6 @@
 #include "project.h"
 #include "geometry.h"
+#include "machine_settings.h"
 #include "plate.h"
 #include "process.h"
 #include "profile.h"
@@ -206,6 +207,8 @@ QJsonObject project_json(const Project &p) {
                   {"klipperExtension", p.machine.klipperExtension},
                   {"stockExtrusionRatio", p.machine.stockExtrusionRatio},
                   {"klipperRevision", p.machine.klipperRevision}};
+    if (!p.machine.printer.isEmpty())
+        m["printer"] = p.machine.printer;
     QJsonObject s = process_json(p.process);
     QJsonArray components, fixtures, path, tensors, scalar, fixed, forces, events, modeled;
     for (auto &f : p.fixtures)
@@ -394,6 +397,8 @@ Project project_from_json(const QJsonObject &j) {
         p.machine.angularAccel <= 0 || p.machine.clearance < 0 || p.machine.filamentDiameter <= 0 ||
         p.machine.maxFlow <= 0)
         throw std::runtime_error("Invalid machine configuration");
+    p.machine.printer = m["printer"].toObject();
+    validate_printer_settings(p.machine);
     p.process = read_process(j["process"].toObject());
     auto filament = j["filament"].toObject();
     p.filamentName = filament["name"].toString("Generic PLA");
@@ -690,21 +695,24 @@ QJsonObject plate_json(const Project &p) {
                            {"retract", t.change.retract},         {"load", t.change.load},
                            {"unload", t.change.unload},           {"seconds", t.change.changeSeconds},
                            {"calibrated", t.change.calibrated}};
-        tools.append(QJsonObject{{"id", t.id},
-                                 {"name", t.name},
-                                 {"extruder", t.extruder},
-                                 {"heater", t.heater},
-                                 {"number", t.controllerTool},
-                                 {"duetDrive", t.duetDrive},
-                                 {"duetHeater", t.duetHeater},
-                                 {"assembly", cad(t.assembly)},
-                                 {"dummy", cad(t.dummy)},
-                                 {"useDummy", t.useDummy},
-                                 {"detachable", t.detachable},
-                                 {"nozzle", nozzle},
-                                 {"dock", matrix(t.dock)},
-                                 {"change", change},
-                                 {"routes", routes}});
+        QJsonObject tool{{"id", t.id},
+                         {"name", t.name},
+                         {"extruder", t.extruder},
+                         {"heater", t.heater},
+                         {"number", t.controllerTool},
+                         {"duetDrive", t.duetDrive},
+                         {"duetHeater", t.duetHeater},
+                         {"assembly", cad(t.assembly)},
+                         {"dummy", cad(t.dummy)},
+                         {"useDummy", t.useDummy},
+                         {"detachable", t.detachable},
+                         {"nozzle", nozzle},
+                         {"dock", matrix(t.dock)},
+                         {"change", change},
+                         {"routes", routes}};
+        if (!t.extruderSettings.isEmpty())
+            tool["extruderSettings"] = t.extruderSettings;
+        tools.append(tool);
     }
     for (const auto &v : p.plate.purge)
         purges.append(QJsonObject{{"from", v.from}, {"to", v.to}, {"volume", v.volume}});
@@ -845,6 +853,8 @@ void read_plate(Project &p, const QJsonObject &j) {
     for (auto entry : j["tools"].toArray()) {
         auto v = entry.toObject();
         ToolDefinition t;
+        t.extruderSettings = v["extruderSettings"].toObject();
+        validate_extruder_settings(t.extruderSettings);
         t.id = v["id"].toString();
         t.name = v["name"].toString();
         t.extruder = v["extruder"].toString();

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuite name="DesktopTests" timestamp="2026&#x002D;10&#x002D;13T23:49:55" hostname="windows-test-host" tests="15" failures="0" errors="0" skipped="0" time="12.470">
+  <properties>
+    <property name="QTestVersion" value="6.11.2"/>
+    <property name="QtVersion" value="6.11.2"/>
+    <property name="QtBuild" value="Qt 6.11.2 (x86_64&#x002D;little_endian&#x002D;llp64 shared (dynamic) release build; by GCC 16.2.0)"/>
+  </properties>
+  <testcase name="initTestCase" classname="DesktopTests" time="0.000"/>
+  <testcase name="bed_texture_preview" classname="DesktopTests" time="1.204"/>
+  <testcase name="machine_settings_layout_and_save" classname="DesktopTests" time="1.631"/>
+  <testcase name="nozzle_limits_auto_fill_and_override" classname="DesktopTests" time="0.350"/>
+  <testcase name="plate_editor_and_preview" classname="DesktopTests" time="1.433"/>
+  <testcase name="cartesian_workspace" classname="DesktopTests" time="1.044"/>
+  <testcase name="spiral_profile_preview(bed)" classname="DesktopTests" time="1.516"/>
+  <testcase name="spiral_profile_preview(head)" classname="DesktopTests" time="1.301"/>
+  <testcase name="rotary_axis_preview(rotary&#x002D;bed)" classname="DesktopTests" time="0.773"/>
+  <testcase name="rotary_axis_preview(tilting&#x002D;head)" classname="DesktopTests" time="0.779"/>
+  <testcase name="inline_workspace_and_layer_filters" classname="DesktopTests" time="0.396"/>
+  <testcase name="step_parameters_preview" classname="DesktopTests" time="0.401"/>
+  <testcase name="toolpaths_dummy_and_process_controls" classname="DesktopTests" time="0.908"/>
+  <testcase name="playback_and_background_replay" classname="DesktopTests" time="0.727"/>
+  <testcase name="cleanupTestCase" classname="DesktopTests" time="0.000"/>
+</testsuite>

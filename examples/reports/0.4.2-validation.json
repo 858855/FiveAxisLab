@@ -1,0 +1,43 @@
+{
+  "version": "0.4.2",
+  "suites": {
+    "core": {
+      "tests": "55",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "8.994"
+    },
+    "plate": {
+      "tests": "33",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "59.349"
+    },
+    "desktop": {
+      "tests": "15",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "14.273"
+    },
+    "machine": {
+      "tests": "7",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0",
+      "time": "0.302"
+    },
+    "python": {
+      "tests": 11,
+      "failures": 0
+    }
+  },
+  "evidence": [
+    "native Qt desktop",
+    "geometric collision validation",
+    "controller semantic replay"
+  ],
+  "physicalQualification": false
+}
