@@ -7,6 +7,7 @@
 #include <QXmlStreamReader>
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <set>
 #include <sstream>
@@ -21,11 +22,15 @@ ToolheadAssembly make_dummy_toolhead(double nozzleDiameter) {
     ToolheadAssembly t;
     t.sourceName = "Dummy toolhead";
     t.sourceUnits = "synthetic millimetres";
-    t.components.push_back({"dummy-nozzle", "Dummy nozzle", cylinder_mesh(Vec3(0,0,1), nozzleDiameter/2, 2), Link::Nozzle, false, true});
-    t.components.push_back({"dummy-break", "Dummy heat break", cylinder_mesh(Vec3(0,0,5), 1, 6), Link::Nozzle});
-    t.components.push_back({"dummy-heater", "Dummy heater block", box_mesh(Vec3(0,0,12),Vec3(10,8,8)), Link::Nozzle});
-    t.components.push_back({"dummy-fan", "Dummy fan shroud", box_mesh(Vec3(11,0,18),Vec3(8,12,12)), Link::Nozzle});
-    t.contactRadius = std::max(.55, nozzleDiameter*.8);
+    t.components.push_back({"dummy-nozzle", "Dummy nozzle",
+                            cylinder_mesh(Vec3(0, 0, 1), nozzleDiameter / 2, 2), Link::Nozzle, false, true});
+    t.components.push_back(
+        {"dummy-break", "Dummy heat break", cylinder_mesh(Vec3(0, 0, 5), 1, 6), Link::Nozzle});
+    t.components.push_back(
+        {"dummy-heater", "Dummy heater block", box_mesh(Vec3(0, 0, 12), Vec3(10, 8, 8)), Link::Nozzle});
+    t.components.push_back(
+        {"dummy-fan", "Dummy fan shroud", box_mesh(Vec3(11, 0, 18), Vec3(8, 12, 12)), Link::Nozzle});
+    t.contactRadius = std::max(.55, nozzleDiameter * .8);
     t.contactHeight = .75;
     return t;
 }
@@ -92,21 +97,41 @@ bool contains(const Mesh &mesh, const Vec3 &point) {
         hits.end());
     return hits.size() % 2 != 0;
 }
-static void weld(Mesh &m) {
-    std::map<std::array<long long, 3>, int> ids;
+void weld_mesh_vertices(Mesh &m) {
+    constexpr double tolerance = 1e-7;
+    using Key = std::array<long long, 3>;
+    std::map<Key, std::vector<int>> ids;
     std::vector<Vec3> v;
     std::vector<int> remap;
+    Vec3 origin = m.vertices.empty() ? Vec3::Zero().eval() : m.vertices.front();
     for (const Vec3 &p : m.vertices) {
         if (!p.allFinite())
             throw std::runtime_error("Non-finite mesh coordinates");
-        std::array<long long, 3> key = {llround(p.x() * 1e7), llround(p.y() * 1e7), llround(p.z() * 1e7)};
-        auto it = ids.find(key);
-        if (it == ids.end()) {
-            ids[key] = int(v.size());
-            remap.push_back(int(v.size()));
+        Vec3 scaled = (p - origin) / tolerance;
+        // Keep neighbour-key arithmetic away from integer overflow.
+        if (!scaled.allFinite() ||
+            scaled.cwiseAbs().maxCoeff() >= double(std::numeric_limits<long long>::max()) / 2)
+            throw std::runtime_error("Mesh extent too large for seam stitching");
+        Key key{static_cast<long long>(std::floor(scaled.x())),
+                static_cast<long long>(std::floor(scaled.y())),
+                static_cast<long long>(std::floor(scaled.z()))};
+        int match = -1;
+        for (int x = -1; x <= 1; ++x)
+            for (int y = -1; y <= 1; ++y)
+                for (int z = -1; z <= 1; ++z) {
+                    auto it = ids.find(Key{key[0] + x, key[1] + y, key[2] + z});
+                    if (it != ids.end())
+                        for (int id : it->second)
+                            if ((p - v[id]).squaredNorm() <= tolerance * tolerance &&
+                                (match < 0 || id < match))
+                                match = id;
+                }
+        if (match < 0) {
+            match = int(v.size());
+            ids[key].push_back(match);
             v.push_back(p);
-        } else
-            remap.push_back(it->second);
+        }
+        remap.push_back(match);
     }
     for (auto &t : m.triangles)
         for (int j = 0; j < 3; ++j) {
@@ -294,12 +319,20 @@ Mesh load_mesh(const QString &filename) {
             }
         }
     }
-    weld(m);
+    weld_mesh_vertices(m);
     if (m.empty())
         throw std::runtime_error("Mesh contains no valid triangles");
     return m;
 }
-VolumeMesh tetrahedralize(const Mesh &mesh, double maxVolume) {
+VolumeMesh tetrahedralize(const Mesh &source, double maxVolume) {
+    // Projects saved by older STEP importers contain independent face vertices.
+    // Normalize a private copy so painting IDs and saved validation fingerprints stay intact.
+    Mesh mesh = source;
+    weld_mesh_vertices(mesh);
+    if (mesh.empty())
+        throw std::runtime_error("Volume slicing requires a non-empty mesh");
+    if (!std::isfinite(maxVolume) || maxVolume <= 0)
+        throw std::runtime_error("Invalid maximum tetrahedron volume");
     std::map<std::pair<int, int>, int> edges;
     for (auto t : mesh.triangles)
         for (int k = 0; k < 3; ++k) {
@@ -308,10 +341,16 @@ VolumeMesh tetrahedralize(const Mesh &mesh, double maxVolume) {
                 std::swap(a, b);
             ++edges[{a, b}];
         }
-    for (auto [edge, count] : edges)
-        if (count != 2)
-            throw std::runtime_error(
-                "Volume slicing requires a closed manifold mesh; repair boundary edges first");
+    size_t boundary = 0, nonManifold = 0;
+    for (auto [edge, count] : edges) {
+        boundary += count == 1;
+        nonManifold += count > 2;
+    }
+    if (boundary || nonManifold)
+        throw std::runtime_error(
+            "Volume slicing requires a closed manifold mesh: " + std::to_string(boundary) +
+            " boundary edges and " + std::to_string(nonManifold) +
+            " non-manifold edges remain after seam stitching. Repair the source CAD solid or mesh.");
     tetgenio in, out;
     in.numberofpoints = int(mesh.vertices.size());
     in.pointlist = new REAL[in.numberofpoints * 3];

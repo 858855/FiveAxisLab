@@ -1,4 +1,5 @@
 #include "step_import.h"
+#include "geometry.h"
 #include "project.h"
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
@@ -55,7 +56,7 @@ ToolheadAssembly load_step_assembly(const QString &filename, const StepImportOpt
     QString cached = cacheRoot + "/" + out.sourceHash + "-" + QString::number(deflection, 'g', 12) + "-" +
                      QString::number(options.angularDeflection, 'g', 12) + "-" +
                      QString::number(options.renderDeflection, 'g', 12) +
-                     (options.splitCompounds ? "-split" : "-whole") + "-v3.5axis";
+                     (options.splitCompounds ? "-split" : "-whole") + "-v4.5axis";
     if (QFile::exists(cached))
         try {
             auto stored = load_project(cached);
@@ -158,6 +159,10 @@ ToolheadAssembly load_step_assembly(const QString &filename, const StepImportOpt
                         mesh.triangles.emplace_back(offset + a - 1, offset + b - 1, offset + c - 1);
                     }
                 }
+                // OCCT tessellates faces separately, including duplicate nodes at
+                // shared CAD edges and periodic seams. Restore indexed connectivity
+                // with a numerical seam tolerance, never the tessellation deflection.
+                weld_mesh_vertices(mesh);
                 return mesh;
             };
             comp.renderMesh = tessellate(std::max(options.renderDeflection, deflection));

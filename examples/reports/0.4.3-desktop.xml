@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="DesktopTests" timestamp="2026-10-14T00:28:40" hostname="windows-research-runner" tests="15" failures="0" errors="0" skipped="0" time="13.923">
+  <properties>
+    <property name="QTestVersion" value="6.11.2" />
+    <property name="QtVersion" value="6.11.2" />
+    <property name="QtBuild" value="Qt 6.11.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 16.2.0)" />
+  </properties>
+  <testcase name="initTestCase" classname="DesktopTests" time="0.000" />
+  <testcase name="bed_texture_preview" classname="DesktopTests" time="1.358" />
+  <testcase name="machine_settings_layout_and_save" classname="DesktopTests" time="1.662">
+    <system-err>
+      setGeometry: Unable to set geometry 1710x1350+90+45 (frame: 1732x1406+79+0) on QWidgetWindow/"machineSettingsDialogWindow" on "HT225HPB". Resulting geometry: 1710x1050+90+45 (frame: 1732x1106+79+0) margins: 11, 45, 11, 11 minimum size: 860x600 MINMAXINFO(maxSize=POINT(x=0, y=0), maxpos=POINT(x=0, y=0), maxtrack=POINT(x=0, y=0), mintrack=POINT(x=1312, y=956)))
+    </system-err>
+  </testcase>
+  <testcase name="nozzle_limits_auto_fill_and_override" classname="DesktopTests" time="0.381" />
+  <testcase name="plate_editor_and_preview" classname="DesktopTests" time="1.678" />
+  <testcase name="cartesian_workspace" classname="DesktopTests" time="1.324" />
+  <testcase name="spiral_profile_preview(bed)" classname="DesktopTests" time="1.776" />
+  <testcase name="spiral_profile_preview(head)" classname="DesktopTests" time="1.422" />
+  <testcase name="rotary_axis_preview(rotary-bed)" classname="DesktopTests" time="0.769" />
+  <testcase name="rotary_axis_preview(tilting-head)" classname="DesktopTests" time="0.783" />
+  <testcase name="inline_workspace_and_layer_filters" classname="DesktopTests" time="0.486" />
+  <testcase name="step_parameters_preview" classname="DesktopTests" time="0.463" />
+  <testcase name="toolpaths_dummy_and_process_controls" classname="DesktopTests" time="0.973" />
+  <testcase name="playback_and_background_replay" classname="DesktopTests" time="0.842" />
+  <testcase name="cleanupTestCase" classname="DesktopTests" time="0.000" />
+</testsuite>

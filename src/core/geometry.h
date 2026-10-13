@@ -5,6 +5,8 @@ Mesh box_mesh(const Vec3 &center, const Vec3 &size, const QString &name = "Box")
 Mesh cylinder_mesh(const Vec3 &center, double radius, double height, const QString &name = "Cylinder",
                    int segments = 32);
 Mesh load_mesh(const QString &filename);
+// Join coincident face-seam vertices within 1e-7 mm, without filling boundary holes.
+void weld_mesh_vertices(Mesh &mesh);
 VolumeMesh tetrahedralize(const Mesh &mesh, double maxVolume = 5);
 Mesh volume_surface(const VolumeMesh &mesh);
 bool contains(const Mesh &mesh, const Vec3 &point);

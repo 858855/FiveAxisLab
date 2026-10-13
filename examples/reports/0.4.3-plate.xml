@@ -1,0 +1,41 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="PlateTests" timestamp="2026-10-14T00:28:40" hostname="windows-research-runner" tests="33" failures="0" errors="0" skipped="0" time="56.166">
+  <properties>
+    <property name="QTestVersion" value="6.11.2" />
+    <property name="QtVersion" value="6.11.2" />
+    <property name="QtBuild" value="Qt 6.11.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 16.2.0)" />
+  </properties>
+  <testcase name="initTestCase" classname="PlateTests" time="0.000" />
+  <testcase name="schema_migration" classname="PlateTests" time="0.022" />
+  <testcase name="deduplicated_assets" classname="PlateTests" time="0.002" />
+  <testcase name="nozzle_geometry_and_invalidation" classname="PlateTests" time="0.003" />
+  <testcase name="scoped_component_identity" classname="PlateTests" time="0.000" />
+  <testcase name="tool_offsets_no_carriage_jump" classname="PlateTests" time="0.000" />
+  <testcase name="controller_replay(Duet)" classname="PlateTests" time="0.008" />
+  <testcase name="controller_replay(Klipper)" classname="PlateTests" time="0.008" />
+  <testcase name="controller_replay(XYZ)" classname="PlateTests" time="0.009" />
+  <testcase name="collision_prefix_and_threads" classname="PlateTests" time="0.011" />
+  <testcase name="thin_obstacle" classname="PlateTests" time="0.002" />
+  <testcase name="final_bead_birth_collision" classname="PlateTests" time="0.012" />
+  <testcase name="disconnected_step_containment" classname="PlateTests" time="0.000" />
+  <testcase name="backward_restore" classname="PlateTests" time="0.000" />
+  <testcase name="deterministic_pool" classname="PlateTests" time="0.000" />
+  <testcase name="compute_parity(CPU)" classname="PlateTests" time="0.001" />
+  <testcase name="compute_parity(CUDA)" classname="PlateTests" time="0.143" />
+  <testcase name="compute_parity(Vulkan)" classname="PlateTests" time="0.403" />
+  <testcase name="unavailable_gpu_and_nonfinite" classname="PlateTests" time="0.000" />
+  <testcase name="plate_generation" classname="PlateTests" time="0.214" />
+  <testcase name="strict_replay_and_state" classname="PlateTests" time="0.010" />
+  <testcase name="neighboring_object_contact" classname="PlateTests" time="0.001" />
+  <testcase name="gpu_workloads(CPU)" classname="PlateTests" time="0.004" />
+  <testcase name="gpu_workloads(CUDA)" classname="PlateTests" time="0.350" />
+  <testcase name="gpu_workloads(Vulkan)" classname="PlateTests" time="0.581" />
+  <testcase name="gpu_memory_and_cancel" classname="PlateTests" time="0.099" />
+  <testcase name="mixed_material_fea_threads" classname="PlateTests" time="0.000" />
+  <testcase name="shared_nozzle_boundaries_and_purge" classname="PlateTests" time="0.124" />
+  <testcase name="sequential_obstacles_and_budget" classname="PlateTests" time="36.494" />
+  <testcase name="travel_repair" classname="PlateTests" time="0.049" />
+  <testcase name="automatic_sequential_order" classname="PlateTests" time="17.587" />
+  <testcase name="detachable_tools_replay_and_scrub" classname="PlateTests" time="0.021" />
+  <testcase name="cleanupTestCase" classname="PlateTests" time="0.000" />
+</testsuite>

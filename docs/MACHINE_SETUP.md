@@ -34,6 +34,8 @@ Homing, heating/feeder macros, E words, expressions, Bambu proprietary commands 
 
 ## STEP and collision additions
 
+Printable STEP imports stitch coincident face seams before volume slicing. If **Slice + validate** still reports boundary or non-manifold edges after stitching, check that the source contains closed CAD solids rather than open surfaces. The edge counts describe remaining topology defects; changing tessellation deflection does not fill holes. Older saved STEP projects receive the same normalization during volume meshing. See [0.4.3 evidence](RELEASE_0_4_3.md).
+
 **Axes / STEP** selects each physical assembly, imports STEP, switches its dummy option and opens the component/TCP/link/contact calibration preview. Calibration uses that tool's installed assembly, including a separately mounted nozzle. Rotary pivots, machine travel bounds and controller configuration share the same machine transforms as simulation.
 
 **Collision** sets clearance, chord accuracy, angular subdivision accuracy and workpiece-versus-machine-body checks. Parked tools, docks, completed objects, supports, purge structures and accumulated material retain the existing collision rules. Changing any planning input invalidates motion certificates. Machine setup saves trigger a fresh slice when a trajectory already exists.
