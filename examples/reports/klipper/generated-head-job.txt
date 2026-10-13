@@ -1,0 +1,48 @@
+allocate_oids count=14
+config_stepper oid=0 step_pin=gpiochip0/gpio12 dir_pin=gpiochip0/gpio13 invert_step=0 step_pulse_ticks=100
+config_stepper oid=1 step_pin=gpiochip0/gpio14 dir_pin=gpiochip0/gpio15 invert_step=0 step_pulse_ticks=100
+config_endstop oid=2 pin=gpiochip0/gpio2 pull_up=0
+config_trsync oid=3
+config_stepper oid=4 step_pin=gpiochip0/gpio0 dir_pin=gpiochip0/gpio1 invert_step=0 step_pulse_ticks=100
+config_endstop oid=5 pin=gpiochip0/gpio5 pull_up=0
+config_trsync oid=6
+config_stepper oid=7 step_pin=gpiochip0/gpio3 dir_pin=gpiochip0/gpio4 invert_step=0 step_pulse_ticks=100
+config_endstop oid=8 pin=gpiochip0/gpio8 pull_up=0
+config_trsync oid=9
+config_stepper oid=10 step_pin=gpiochip0/gpio6 dir_pin=gpiochip0/gpio7 invert_step=0 step_pulse_ticks=100
+config_analog_in oid=12 pin=gpiochip14/gpio64
+config_digital_out oid=13 pin=gpiochip0/gpio11 value=0 default_value=0 max_duration=150000000
+set_digital_out_pwm_cycle oid=13 cycle_ticks=5000000
+config_stepper oid=11 step_pin=gpiochip0/gpio9 dir_pin=gpiochip0/gpio10 invert_step=0 step_pulse_ticks=100
+finalize_config crc=1716311698
+query_analog_in oid=12 clock=56000000 sample_ticks=50000 sample_count=8 rest_ticks=15000000 bytes_per_report=2 min_value=230 max_value=32303 range_check_count=4
+queue_digital_out oid=13 clock=10000000 on_ticks=0
+set_next_step_dir oid=0 dir=1
+queue_step oid=0 interval=14665064 count=1 add=0
+set_next_step_dir oid=1 dir=1
+queue_step oid=1 interval=14665064 count=1 add=0
+set_next_step_dir oid=4 dir=1
+queue_step oid=4 interval=13910617 count=1 add=0
+set_next_step_dir oid=7 dir=0
+queue_step oid=7 interval=17571813 count=1 add=0
+set_next_step_dir oid=10 dir=0
+queue_step oid=10 interval=15257064 count=1 add=0
+set_next_step_dir oid=11 dir=1
+queue_step oid=11 interval=18044997 count=1 add=0
+queue_step oid=4 interval=1032644 count=1 add=0
+queue_step oid=0 interval=1627232 count=1 add=0
+queue_step oid=1 interval=1627232 count=1 add=0
+queue_step oid=4 interval=710975 count=1 add=0
+queue_step oid=10 interval=2388365 count=2 add=-32029
+queue_step oid=4 interval=616552 count=36 add=0
+queue_step oid=0 interval=1452368 count=15 add=0
+queue_step oid=1 interval=1452368 count=15 add=0
+queue_step oid=7 interval=6916140 count=3 add=0
+queue_step oid=11 interval=7861727 count=2 add=6942
+queue_step oid=10 interval=2355208 count=7 add=0
+queue_step oid=10 interval=2406385 count=1 add=0
+queue_step oid=4 interval=620054 count=1 add=0
+queue_step oid=0 interval=1855816 count=1 add=0
+queue_step oid=1 interval=1855816 count=1 add=0
+queue_step oid=4 interval=734233 count=1 add=0
+queue_step oid=4 interval=1114210 count=1 add=0

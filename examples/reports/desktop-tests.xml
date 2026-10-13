@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuite name="DesktopTests" timestamp="2026&#x002D;10&#x002D;13T03:07:51" hostname="sven" tests="3" failures="0" errors="0" skipped="0" time="1.493">
+  <properties>
+    <property name="QTestVersion" value="6.11.2"/>
+    <property name="QtVersion" value="6.11.2"/>
+    <property name="QtBuild" value="Qt 6.11.2 (x86_64&#x002D;little_endian&#x002D;llp64 shared (dynamic) release build; by GCC 16.2.0)"/>
+  </properties>
+  <testcase name="initTestCase" classname="DesktopTests" time="0.000"/>
+  <testcase name="playback_and_background_replay" classname="DesktopTests" time="1.489"/>
+  <testcase name="cleanupTestCase" classname="DesktopTests" time="0.000"/>
+</testsuite>

@@ -1,0 +1,62 @@
+{
+  "klipperRevision": "e2b99a9159f992169c1ba53029dec020e850cc99",
+  "nativeHostBatch": [
+    {
+      "case": "rotary-extension",
+      "passed": true,
+      "queuedStepsByObject": {
+        "0": 133,
+        "1": 311,
+        "7": 80,
+        "11": 28,
+        "4": 400,
+        "10": 800
+      },
+      "physicalPrintingValidated": false
+    },
+    {
+      "case": "stock-native-axes",
+      "passed": true,
+      "queuedStepsByObject": {
+        "0": 133,
+        "1": 311,
+        "7": 80,
+        "11": 28,
+        "4": 400,
+        "10": 800
+      },
+      "physicalPrintingValidated": false
+    },
+    {
+      "case": "extension-cross-section-rejection",
+      "expectedRejection": "maximum deposition cross-section",
+      "passed": true
+    },
+    {
+      "case": "generated-bed-job",
+      "passed": true,
+      "queuedStepsByObject": {
+        "10": 6000,
+        "4": 34560,
+        "11": 12064,
+        "7": 34560
+      },
+      "physicalPrintingValidated": false
+    },
+    {
+      "case": "generated-head-job",
+      "passed": true,
+      "queuedStepsByObject": {
+        "0": 18,
+        "1": 18,
+        "4": 42,
+        "7": 4,
+        "10": 11,
+        "11": 3
+      },
+      "physicalPrintingValidated": false
+    }
+  ],
+  "physicalPrintingValidated": false,
+  "heaterQualification": "Klipper debug-file mode bypasses heater readiness; cold guard is covered by unit tests only."
+}

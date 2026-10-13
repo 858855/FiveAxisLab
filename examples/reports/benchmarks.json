@@ -1,0 +1,22 @@
+[
+  {
+    "fixture": "curved-stress",
+    "exitCode": 124,
+    "seconds": 180.067
+  },
+  {
+    "fixture": "torus",
+    "exitCode": 2,
+    "seconds": 1.886
+  },
+  {
+    "fixture": "reference-klipper",
+    "exitCode": 0,
+    "seconds": 74.31
+  },
+  {
+    "fixture": "reference-head",
+    "exitCode": 0,
+    "seconds": 20.103
+  }
+]

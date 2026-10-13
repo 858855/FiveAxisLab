@@ -1,0 +1,29 @@
+Generated 3 movements
+Validated 0%
+Validated 10%
+{
+    "checkedIntervals": 158,
+    "controllerSemanticReplayValidated": true,
+    "deposition": {
+        "checked": true,
+        "coverage": 1,
+        "dependencies": [
+        ],
+        "unsupported": [
+        ]
+    },
+    "diagnostics": [
+        "Deposition support / gravity check: 0 flagged movements, 0 dependency edges, 100.0% sampled volume coverage."
+    ],
+    "events": [
+    ],
+    "fingerprint": "a1e4086094ffb0a805e43df3edd07fd4191cfbb648d678c98c7333d427d05aa5",
+    "minimumClearance": 0.519786593094698,
+    "modeled": [
+        "Reference nozzle [Reference nozzle]",
+        "Bed"
+    ],
+    "nativeFirmwareValidated": false,
+    "physicalPrintingValidated": false,
+    "status": 0
+}

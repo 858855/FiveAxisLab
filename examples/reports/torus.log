@@ -1,0 +1,4110 @@
+Generated 3550 movements
+Validated 0%
+Validated 10%
+Validated 20%
+{
+    "checkedIntervals": 4473,
+    "controllerSemanticReplayValidated": false,
+    "deposition": {
+        "checked": true,
+        "coverage": 1,
+        "dependencies": [
+            [
+                -138,
+                10
+            ],
+            [
+                -137,
+                10
+            ],
+            [
+                -136,
+                10
+            ],
+            [
+                -135,
+                7
+            ],
+            [
+                -135,
+                9
+            ],
+            [
+                -135,
+                10
+            ],
+            [
+                -134,
+                7
+            ],
+            [
+                -134,
+                9
+            ],
+            [
+                -134,
+                10
+            ],
+            [
+                -132,
+                7
+            ],
+            [
+                -132,
+                9
+            ],
+            [
+                -132,
+                10
+            ],
+            [
+                -131,
+                7
+            ],
+            [
+                -131,
+                9
+            ],
+            [
+                -130,
+                7
+            ],
+            [
+                -130,
+                9
+            ],
+            [
+                -130,
+                10
+            ],
+            [
+                -128,
+                7
+            ],
+            [
+                -128,
+                9
+            ],
+            [
+                -126,
+                7
+            ],
+            [
+                -126,
+                9
+            ],
+            [
+                -125,
+                7
+            ],
+            [
+                -124,
+                7
+            ],
+            [
+                -124,
+                9
+            ],
+            [
+                -121,
+                8
+            ],
+            [
+                -121,
+                10
+            ],
+            [
+                -115,
+                8
+            ],
+            [
+                -115,
+                10
+            ],
+            [
+                -114,
+                8
+            ],
+            [
+                -114,
+                9
+            ],
+            [
+                -114,
+                10
+            ],
+            [
+                -113,
+                8
+            ],
+            [
+                -113,
+                10
+            ],
+            [
+                -112,
+                8
+            ],
+            [
+                -112,
+                9
+            ],
+            [
+                -112,
+                10
+            ],
+            [
+                -111,
+                8
+            ],
+            [
+                -111,
+                9
+            ],
+            [
+                -111,
+                10
+            ],
+            [
+                -91,
+                -143
+            ],
+            [
+                -89,
+                3
+            ],
+            [
+                -88,
+                3
+            ],
+            [
+                -87,
+                5
+            ],
+            [
+                -86,
+                3
+            ],
+            [
+                -86,
+                5
+            ],
+            [
+                -85,
+                3
+            ],
+            [
+                -85,
+                5
+            ],
+            [
+                -84,
+                -144
+            ],
+            [
+                -84,
+                3
+            ],
+            [
+                -84,
+                5
+            ],
+            [
+                -82,
+                -142
+            ],
+            [
+                -81,
+                3
+            ],
+            [
+                -80,
+                -138
+            ],
+            [
+                -80,
+                4
+            ],
+            [
+                -80,
+                5
+            ],
+            [
+                -80,
+                6
+            ],
+            [
+                -79,
+                -138
+            ],
+            [
+                -79,
+                -137
+            ],
+            [
+                -79,
+                4
+            ],
+            [
+                -79,
+                5
+            ],
+            [
+                -79,
+                6
+            ],
+            [
+                -78,
+                -137
+            ],
+            [
+                -78,
+                -136
+            ],
+            [
+                -78,
+                4
+            ],
+            [
+                -78,
+                5
+            ],
+            [
+                -78,
+                6
+            ],
+            [
+                -77,
+                -141
+            ],
+            [
+                -76,
+                -140
+            ],
+            [
+                -75,
+                3
+            ],
+            [
+                -75,
+                4
+            ],
+            [
+                -75,
+                5
+            ],
+            [
+                -75,
+                6
+            ],
+            [
+                -74,
+                4
+            ],
+            [
+                -74,
+                5
+            ],
+            [
+                -74,
+                6
+            ],
+            [
+                -73,
+                3
+            ],
+            [
+                -72,
+                -139
+            ],
+            [
+                -70,
+                3
+            ],
+            [
+                -70,
+                5
+            ],
+            [
+                -69,
+                -135
+            ],
+            [
+                -69,
+                4
+            ],
+            [
+                -69,
+                5
+            ],
+            [
+                -69,
+                6
+            ],
+            [
+                -68,
+                4
+            ],
+            [
+                -68,
+                6
+            ],
+            [
+                -67,
+                -134
+            ],
+            [
+                -67,
+                4
+            ],
+            [
+                -67,
+                5
+            ],
+            [
+                -67,
+                6
+            ],
+            [
+                -66,
+                3
+            ],
+            [
+                -64,
+                4
+            ],
+            [
+                -64,
+                5
+            ],
+            [
+                -64,
+                6
+            ],
+            [
+                -63,
+                -134
+            ],
+            [
+                -63,
+                4
+            ],
+            [
+                -63,
+                6
+            ],
+            [
+                -62,
+                3
+            ],
+            [
+                -62,
+                5
+            ],
+            [
+                -60,
+                4
+            ],
+            [
+                -60,
+                5
+            ],
+            [
+                -60,
+                6
+            ],
+            [
+                -59,
+                4
+            ],
+            [
+                -59,
+                6
+            ],
+            [
+                -58,
+                3
+            ],
+            [
+                -58,
+                5
+            ],
+            [
+                -56,
+                4
+            ],
+            [
+                -56,
+                6
+            ],
+            [
+                -55,
+                4
+            ],
+            [
+                -54,
+                -133
+            ],
+            [
+                -54,
+                3
+            ],
+            [
+                -54,
+                5
+            ],
+            [
+                -52,
+                -132
+            ],
+            [
+                -52,
+                4
+            ],
+            [
+                -52,
+                6
+            ],
+            [
+                -51,
+                -131
+            ],
+            [
+                -50,
+                3
+            ],
+            [
+                -50,
+                5
+            ],
+            [
+                -48,
+                4
+            ],
+            [
+                -48,
+                6
+            ],
+            [
+                -46,
+                3
+            ],
+            [
+                -46,
+                5
+            ],
+            [
+                -44,
+                4
+            ],
+            [
+                -44,
+                6
+            ],
+            [
+                -43,
+                -130
+            ],
+            [
+                -43,
+                4
+            ],
+            [
+                -43,
+                6
+            ],
+            [
+                -41,
+                -129
+            ],
+            [
+                -41,
+                -127
+            ],
+            [
+                -40,
+                3
+            ],
+            [
+                -40,
+                5
+            ],
+            [
+                -39,
+                3
+            ],
+            [
+                -37,
+                -128
+            ],
+            [
+                -37,
+                -126
+            ],
+            [
+                -37,
+                4
+            ],
+            [
+                -37,
+                6
+            ],
+            [
+                -36,
+                -127
+            ],
+            [
+                -36,
+                -125
+            ],
+            [
+                -35,
+                4
+            ],
+            [
+                -35,
+                6
+            ],
+            [
+                -34,
+                3
+            ],
+            [
+                -34,
+                5
+            ],
+            [
+                -33,
+                3
+            ],
+            [
+                -33,
+                5
+            ],
+            [
+                -32,
+                4
+            ],
+            [
+                -28,
+                3
+            ],
+            [
+                -28,
+                5
+            ],
+            [
+                -28,
+                6
+            ],
+            [
+                -27,
+                3
+            ],
+            [
+                -27,
+                5
+            ],
+            [
+                -26,
+                -124
+            ],
+            [
+                -20,
+                -123
+            ],
+            [
+                -19,
+                3
+            ],
+            [
+                -19,
+                4
+            ],
+            [
+                -19,
+                5
+            ],
+            [
+                -19,
+                6
+            ],
+            [
+                -18,
+                -122
+            ],
+            [
+                -18,
+                3
+            ],
+            [
+                -18,
+                5
+            ],
+            [
+                -17,
+                -121
+            ],
+            [
+                -17,
+                3
+            ],
+            [
+                -17,
+                5
+            ],
+            [
+                -17,
+                6
+            ],
+            [
+                -16,
+                3
+            ],
+            [
+                -16,
+                5
+            ],
+            [
+                -15,
+                3
+            ],
+            [
+                -15,
+                5
+            ],
+            [
+                -15,
+                6
+            ],
+            [
+                -14,
+                4
+            ],
+            [
+                -13,
+                3
+            ],
+            [
+                -13,
+                5
+            ],
+            [
+                -13,
+                6
+            ],
+            [
+                -12,
+                -115
+            ],
+            [
+                -12,
+                3
+            ],
+            [
+                -12,
+                5
+            ],
+            [
+                -12,
+                6
+            ],
+            [
+                -11,
+                -120
+            ],
+            [
+                -11,
+                -113
+            ],
+            [
+                -11,
+                3
+            ],
+            [
+                -11,
+                4
+            ],
+            [
+                -11,
+                5
+            ],
+            [
+                -11,
+                6
+            ],
+            [
+                -10,
+                -119
+            ],
+            [
+                -10,
+                4
+            ],
+            [
+                -9,
+                4
+            ],
+            [
+                -8,
+                -114
+            ],
+            [
+                -8,
+                -112
+            ],
+            [
+                -8,
+                3
+            ],
+            [
+                -8,
+                5
+            ],
+            [
+                -8,
+                6
+            ],
+            [
+                -7,
+                3
+            ],
+            [
+                -7,
+                5
+            ],
+            [
+                -7,
+                6
+            ],
+            [
+                -6,
+                3
+            ],
+            [
+                -6,
+                4
+            ],
+            [
+                -6,
+                5
+            ],
+            [
+                -6,
+                6
+            ],
+            [
+                -5,
+                3
+            ],
+            [
+                -5,
+                4
+            ],
+            [
+                -5,
+                5
+            ],
+            [
+                -5,
+                6
+            ],
+            [
+                -4,
+                -118
+            ],
+            [
+                -4,
+                3
+            ],
+            [
+                -4,
+                4
+            ],
+            [
+                -4,
+                5
+            ],
+            [
+                -4,
+                6
+            ],
+            [
+                -3,
+                -117
+            ],
+            [
+                -3,
+                3
+            ],
+            [
+                -3,
+                4
+            ],
+            [
+                -3,
+                5
+            ],
+            [
+                -3,
+                6
+            ],
+            [
+                -2,
+                -116
+            ],
+            [
+                -2,
+                3
+            ],
+            [
+                -2,
+                4
+            ],
+            [
+                -2,
+                5
+            ],
+            [
+                -2,
+                6
+            ],
+            [
+                -1,
+                -111
+            ],
+            [
+                -1,
+                3
+            ],
+            [
+                -1,
+                4
+            ],
+            [
+                -1,
+                5
+            ],
+            [
+                -1,
+                6
+            ],
+            [
+                0,
+                3
+            ],
+            [
+                0,
+                4
+            ],
+            [
+                0,
+                5
+            ],
+            [
+                0,
+                6
+            ],
+            [
+                1,
+                3
+            ],
+            [
+                1,
+                4
+            ],
+            [
+                1,
+                5
+            ],
+            [
+                1,
+                6
+            ],
+            [
+                2,
+                3
+            ],
+            [
+                2,
+                4
+            ],
+            [
+                2,
+                5
+            ],
+            [
+                2,
+                6
+            ],
+            [
+                3,
+                7
+            ],
+            [
+                3,
+                8
+            ],
+            [
+                3,
+                9
+            ],
+            [
+                3,
+                10
+            ],
+            [
+                4,
+                7
+            ],
+            [
+                4,
+                8
+            ],
+            [
+                4,
+                9
+            ],
+            [
+                4,
+                10
+            ],
+            [
+                5,
+                7
+            ],
+            [
+                5,
+                8
+            ],
+            [
+                5,
+                9
+            ],
+            [
+                5,
+                10
+            ],
+            [
+                5,
+                11
+            ],
+            [
+                6,
+                7
+            ],
+            [
+                6,
+                8
+            ],
+            [
+                6,
+                9
+            ],
+            [
+                6,
+                10
+            ],
+            [
+                6,
+                11
+            ],
+            [
+                7,
+                12
+            ],
+            [
+                7,
+                13
+            ],
+            [
+                7,
+                14
+            ],
+            [
+                7,
+                15
+            ],
+            [
+                8,
+                12
+            ],
+            [
+                8,
+                13
+            ],
+            [
+                8,
+                14
+            ],
+            [
+                8,
+                15
+            ],
+            [
+                8,
+                17
+            ],
+            [
+                8,
+                18
+            ],
+            [
+                9,
+                12
+            ],
+            [
+                9,
+                13
+            ],
+            [
+                9,
+                14
+            ],
+            [
+                9,
+                15
+            ],
+            [
+                9,
+                16
+            ],
+            [
+                10,
+                12
+            ],
+            [
+                10,
+                13
+            ],
+            [
+                10,
+                14
+            ],
+            [
+                10,
+                15
+            ],
+            [
+                11,
+                13
+            ],
+            [
+                11,
+                15
+            ],
+            [
+                12,
+                19
+            ],
+            [
+                12,
+                20
+            ],
+            [
+                12,
+                21
+            ],
+            [
+                12,
+                22
+            ],
+            [
+                13,
+                19
+            ],
+            [
+                13,
+                20
+            ],
+            [
+                13,
+                21
+            ],
+            [
+                13,
+                22
+            ],
+            [
+                14,
+                19
+            ],
+            [
+                14,
+                20
+            ],
+            [
+                14,
+                21
+            ],
+            [
+                14,
+                22
+            ],
+            [
+                15,
+                19
+            ],
+            [
+                15,
+                20
+            ],
+            [
+                15,
+                21
+            ],
+            [
+                15,
+                22
+            ],
+            [
+                16,
+                20
+            ],
+            [
+                16,
+                21
+            ],
+            [
+                18,
+                19
+            ],
+            [
+                18,
+                22
+            ],
+            [
+                19,
+                23
+            ],
+            [
+                19,
+                24
+            ],
+            [
+                19,
+                25
+            ],
+            [
+                19,
+                26
+            ],
+            [
+                20,
+                23
+            ],
+            [
+                20,
+                24
+            ],
+            [
+                20,
+                25
+            ],
+            [
+                20,
+                26
+            ],
+            [
+                21,
+                23
+            ],
+            [
+                21,
+                24
+            ],
+            [
+                21,
+                25
+            ],
+            [
+                21,
+                26
+            ],
+            [
+                22,
+                23
+            ],
+            [
+                22,
+                24
+            ],
+            [
+                22,
+                25
+            ],
+            [
+                22,
+                26
+            ],
+            [
+                23,
+                27
+            ],
+            [
+                23,
+                28
+            ],
+            [
+                24,
+                27
+            ],
+            [
+                24,
+                28
+            ],
+            [
+                25,
+                27
+            ],
+            [
+                25,
+                28
+            ],
+            [
+                26,
+                27
+            ],
+            [
+                26,
+                28
+            ]
+        ],
+        "unsupported": [
+        ]
+    },
+    "diagnostics": [
+        "Generated 114 removable support columns; final motion validation remains required.",
+        "Deposition support / gravity check: 0 flagged movements, 315 dependency edges, 100.0% sampled volume coverage.",
+        "7 layers, 29 independently scheduled curves, 3550 coordinated movements.",
+        "Research scalar-field solver uses stress-weighted diffusion with bounded spacing; material behavior and strength require calibration."
+    ],
+    "events": [
+        {
+            "clearance": -1,
+            "contact": [
+                -4.308192849572187,
+                -4.315707057018627,
+                0.6334310466988906
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 576,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.55471706978548
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -4.099270718832848,
+                -4.5,
+                0.39999999999999997
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 577,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.57697472088702
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -4.0356732345862305,
+                -4.500031183729996,
+                0.39999999999999997
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 577,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.59923237198858
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -3.9666666666666663,
+                -4.54921023937968,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 578,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.61980559683852
+        },
+        {
+            "clearance": 0.04662582515988046,
+            "contact": [
+                -3.9202653575990656,
+                -4.495429869952322,
+                0.40000000000000013
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 578,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.64037882168846
+        },
+        {
+            "clearance": 0.16710116064819625,
+            "contact": [
+                -3.7995655060184705,
+                -4.530894494134582,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 578,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.6609520465384
+        },
+        {
+            "clearance": 0.02706621978221957,
+            "contact": [
+                -3.6729337802177797,
+                -4.62658644799134,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 579,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.68152527138834
+        },
+        {
+            "clearance": 0.1536979455829104,
+            "contact": [
+                -3.546302054417089,
+                -4.722278401848096,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 579,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.70209849623828
+        },
+        {
+            "clearance": 0.21701380848325558,
+            "contact": [
+                -3.4829861915167437,
+                -4.770124378776475,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 579,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.71238510866326
+        },
+        {
+            "clearance": 0.20035980535414932,
+            "contact": [
+                -2.5292285293628245,
+                -5.499640194645851,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 584,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.8493939771556
+        },
+        {
+            "clearance": 0.12990948271276537,
+            "contact": [
+                -2.3525081384104136,
+                -5.570090517287235,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 584,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.87191777108922
+        },
+        {
+            "clearance": 0.05945916007138141,
+            "contact": [
+                -2.175787747458003,
+                -5.640540839928619,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 584,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.89444156502282
+        },
+        {
+            "clearance": 0.02400704298428704,
+            "contact": [
+                -2.155349824943032,
+                -5.678827678298033,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 585,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.91696535895642
+        },
+        {
+            "clearance": 0.07018021998562018,
+            "contact": [
+                -2.1124166229984858,
+                -5.655478139759995,
+                0.40000000000000013
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 585,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.93948915289003
+        },
+        {
+            "clearance": 0.1783998382600609,
+            "contact": [
+                -2.0093320557488115,
+                -5.615902898393922,
+                0.40000000000000013
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 585,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.96201294682363
+        },
+        {
+            "clearance": 0.18797788439171123,
+            "contact": [
+                -2.0008849731943994,
+                -5.611387838702293,
+                0.40000000000000013
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 586,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.97209791996072
+        },
+        {
+            "clearance": 0.2434380639854888,
+            "contact": [
+                -1.9337109639863939,
+                -5.629333660164521,
+                0.40000000000000013
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 587,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 81.99615922011995
+        },
+        {
+            "clearance": 0.11793898856250937,
+            "contact": [
+                -1.787139424689075,
+                -5.665764118769414,
+                0.40000000000000036
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 588,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.03148492974955
+        },
+        {
+            "clearance": 0.21973113788850768,
+            "contact": [
+                -1.6897304111381513,
+                -5.636215417555278,
+                0.40000000000000036
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 589,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.0526276279636
+        },
+        {
+            "clearance": 0.24517917522000737,
+            "contact": [
+                -1.66537815775042,
+                -5.628828242251745,
+                0.40000000000000036
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 589,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.05791330251712
+        },
+        {
+            "clearance": 0.1266467347248303,
+            "contact": [
+                1.778806631153033,
+                -5.663236393485071,
+                0.733333333333333
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 597,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.470726102689
+        },
+        {
+            "clearance": 0.012200958275209001,
+            "contact": [
+                1.8892397154516642,
+                -5.69424850808292,
+                0.7333333333333328
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 598,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.50521795376963
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                1.9000000000000008,
+                -5.76445354007425,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 599,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.53905400227468
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                1.9292832190787017,
+                -5.737251508175296,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 600,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.56048845282076
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                1.960328757622083,
+                -5.723965454255897,
+                0.39999999999999997
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 600,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.58192290336684
+        },
+        {
+            "clearance": 0.01513513795106114,
+            "contact": [
+                2.041089404921086,
+                -5.684864862048939,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 601,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.60267910106974
+        },
+        {
+            "clearance": 0.07695930351454461,
+            "contact": [
+                2.1903494706731808,
+                -5.623040696485456,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 601,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.62343529877263
+        },
+        {
+            "clearance": 0.13878346907802896,
+            "contact": [
+                2.339609536425275,
+                -5.561216530921971,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 601,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.64419149647553
+        },
+        {
+            "clearance": 0.20060763464151332,
+            "contact": [
+                2.4888696021773695,
+                -5.499392365358487,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 602,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.66494769417842
+        },
+        {
+            "clearance": 0.2315197174232555,
+            "contact": [
+                2.563499635053417,
+                -5.468480282576745,
+                0.4317425901272347
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 602,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.67532579302987
+        },
+        {
+            "clearance": 0.1731578447255946,
+            "contact": [
+                3.5268421552744047,
+                -4.73994313023862,
+                0.7999999999999996
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 605,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.79701438764774
+        },
+        {
+            "clearance": 0.07931556718299289,
+            "contact": [
+                3.6206844328170065,
+                -4.667935417951664,
+                0.733333333333333
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 605,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.81876622455228
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.7464286354435354,
+                -4.562671626591254,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 606,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.8393908031953
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.808205478836282,
+                -4.540231675339989,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 606,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.86001538183834
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.7128737282041575,
+                -4.648312816003127,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 606,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.88063996048136
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.726872490607456,
+                -4.607690756006754,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 607,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.90126453912438
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.7085438744250565,
+                -4.532132599517151,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 607,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.92188911776742
+        },
+        {
+            "clearance": 0.014740818958945745,
+            "contact": [
+                3.9799665195026805,
+                -4.485259181041054,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 607,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.94251369641044
+        },
+        {
+            "clearance": 0.12069186362894868,
+            "contact": [
+                4.086496946065064,
+                -4.379308136371051,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 608,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.97718329666613
+        },
+        {
+            "clearance": 0.2127998669725688,
+            "contact": [
+                4.157173902952458,
+                -4.287200133027431,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 609,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 82.99873320129635
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                4.299999999999999,
+                -4.157810351333838,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 609,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.02028310592658
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                4.325430170544674,
+                -4.00075383375799,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 610,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.04095789120127
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                4.340798687356154,
+                -3.9318017241948366,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 610,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.06163267647597
+        },
+        {
+            "clearance": 0.0864150905776695,
+            "contact": [
+                4.5205887919543155,
+                -3.813584909422331,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 610,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.08230746175066
+        },
+        {
+            "clearance": 0.2135841639981626,
+            "contact": [
+                4.618168102659136,
+                -3.6864158360018378,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 611,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.10298224702535
+        },
+        {
+            "clearance": 0.24537643235328588,
+            "contact": [
+                4.642562930335341,
+                -3.6546235676467145,
+                0.5776229104536326
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 611,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.10815094334403
+        },
+        {
+            "clearance": 0.23785280831867453,
+            "contact": [
+                5.272389053752679,
+                -2.7690450256968546,
+                0.5278506344542828
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 612,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.1783490909117
+        },
+        {
+            "clearance": 0.1316045818239974,
+            "contact": [
+                5.369029130208676,
+                -2.712899504764656,
+                0.504576210794245
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 613,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.21304238123118
+        },
+        {
+            "clearance": 0.07844397650306068,
+            "contact": [
+                5.421556023496939,
+                -2.6776292835164752,
+                0.7333333333333331
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 614,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.23478867823029
+        },
+        {
+            "clearance": 0.03320109054012477,
+            "contact": [
+                5.466798909459875,
+                -2.5684032947896585,
+                0.7333333333333331
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 614,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.2565349752294
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                5.515656374602476,
+                -2.3840981213881838,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 615,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.27715834268335
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                5.586903113102775,
+                -2.2537021399790524,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 615,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.29778171013731
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                5.5968064776481725,
+                -2.12330615856992,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 615,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.31840507759127
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                5.500000000000001,
+                -2.261922692479469,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 616,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.33902844504522
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                5.508042070579753,
+                -2.1601056349781063,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 616,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.35965181249918
+        },
+        {
+            "clearance": 0.022218196075731788,
+            "contact": [
+                5.497822235957375,
+                -2.0778887906112233,
+                0.7333333333333332
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 616,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.38027517995313
+        },
+        {
+            "clearance": 0.15219010680026246,
+            "contact": [
+                5.489389019321191,
+                -1.9481802526121546,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 617,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.41460348074682
+        },
+        {
+            "clearance": 0.22424936536387152,
+            "contact": [
+                5.5089050909438715,
+                -1.8757506346361286,
+                0.7292855647224823
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 618,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 83.43192547173845
+        },
+        {
+            "clearance": 0.11117061533779093,
+            "contact": [
+                4.974228124470979,
+                3.188829384662209,
+                0.7595119321067378
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 632,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.12315422842966
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                4.901122095099269,
+                3.3107578345561333,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 633,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.1575999880555
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                4.95110220560514,
+                3.36261679828218,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 634,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.1914589469767
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                5.018959714068937,
+                3.306609694244771,
+                0.3999999999999999
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 635,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.21290791075282
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                4.938622061774649,
+                3.3909604000554756,
+                0.39999999999999997
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 635,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.23435687452896
+        },
+        {
+            "clearance": 0.1579908792498257,
+            "contact": [
+                4.575405138544071,
+                3.7420091207501747,
+                0.7999999999999999
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 636,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.25510680128252
+        },
+        {
+            "clearance": 0.03010795673738942,
+            "contact": [
+                4.476839300790271,
+                3.869892043262611,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 636,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.27585672803608
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                4.30662764700285,
+                3.954347725983084,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 636,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.29660665478964
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                4.340602315813925,
+                4.031796170856036,
+                0.3999999999999999
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 637,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.31735658154321
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                4.4782433272277125,
+                3.911158298970756,
+                0.39999999999999997
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 637,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.33810650829676
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                4.415024031984059,
+                4.030276085343019,
+                0.39999999999999997
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 637,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.35885643505033
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                4.347482948274006,
+                4.132541041983445,
+                0.39999999999999997
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 638,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.3935999390225
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.8375325766467165,
+                4.514641039006131,
+                0.39999999999999997
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 639,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.41558911059342
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.707221104157431,
+                4.585056217656295,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 640,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.45498823565096
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.700198213077088,
+                4.6452813911564785,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 641,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.47625925201567
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.8295800410748835,
+                4.513672218994228,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 641,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.49753026838036
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.7426928375205106,
+                4.613214434575477,
+                0.39999999999999997
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 641,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.51880128474507
+        },
+        {
+            "clearance": 0.06287667857521535,
+            "contact": [
+                3.637123321424784,
+                4.657688846161429,
+                0.7333333333333331
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 642,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.54007230110977
+        },
+        {
+            "clearance": 0.19752137583131502,
+            "contact": [
+                3.5024786241686843,
+                4.760931624114004,
+                0.7999999999999996
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 642,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.56134331747447
+        },
+        {
+            "clearance": 0.23118255014533995,
+            "contact": [
+                3.4688174498546593,
+                4.786742318602148,
+                0.7999999999999996
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 642,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 84.56666107156565
+        },
+        {
+            "clearance": 0.12652523103999466,
+            "contact": [
+                -1.7789229029299922,
+                5.663271664143009,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 658,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.31361517342474
+        },
+        {
+            "clearance": 0.004634544602441967,
+            "contact": [
+                -1.8959126965645354,
+                5.697815290797735,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 659,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.34900322804003
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -1.9212991717791232,
+                5.71742659509201,
+                0.7301061860940724
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 660,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.37116186774456
+        },
+        {
+            "clearance": 0.029106553485512027,
+            "contact": [
+                -2.010833663227671,
+                5.681534997943642,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 661,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.39923596546075
+        },
+        {
+            "clearance": 0.06520300295755757,
+            "contact": [
+                -2.12530231948309,
+                5.649597397123166,
+                0.39999999999999997
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 662,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.42040980575514
+        },
+        {
+            "clearance": 0.016058474278960233,
+            "contact": [
+                -2.007037795128243,
+                5.68394152572104,
+                0.39999999999999997
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 662,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.44158364604955
+        },
+        {
+            "clearance": 0.08836821345380219,
+            "contact": [
+                -2.1588175292486618,
+                5.611631786546198,
+                0.7333333333333338
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 662,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.46275748634395
+        },
+        {
+            "clearance": 0.10959518008032099,
+            "contact": [
+                -2.2100639598886542,
+                5.590404819919679,
+                0.7333333333333336
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 663,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.48382285827608
+        },
+        {
+            "clearance": 0.17130034031583818,
+            "contact": [
+                -2.3817740508531844,
+                5.528699659684162,
+                0.7333333333333334
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 664,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.50588100154944
+        },
+        {
+            "clearance": 0.23300550055135627,
+            "contact": [
+                -2.553484141817715,
+                5.466994499448644,
+                0.7564458955369351
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 664,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.52793914482278
+        },
+        {
+            "clearance": 0.24843179061023601,
+            "contact": [
+                -2.5964116645588478,
+                5.451568209389764,
+                0.7798609079411891
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 664,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.53345368064112
+        },
+        {
+            "clearance": 0.1770909908986451,
+            "contact": [
+                -3.522909009101354,
+                4.7436344062517986,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 668,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.66304382622921
+        },
+        {
+            "clearance": 0.08555864777232802,
+            "contact": [
+                -3.6144413522276713,
+                4.673399168985752,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 668,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.6845262835904
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -3.74161450634581,
+                4.5726561989059284,
+                0.7270281050991199
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 669,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.70522444255818
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -3.833333333333334,
+                4.628576538046474,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 669,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.72592260152595
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -3.967208995930777,
+                4.52936954545429,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 669,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.74662076049373
+        },
+        {
+            "clearance": 0.1757029606516367,
+            "contact": [
+                -4.124297039348362,
+                4.282236143129801,
+                0.5209799204834445
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 670,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.7673189194615
+        },
+        {
+            "clearance": 0.04823903887146397,
+            "contact": [
+                -4.251760961128535,
+                4.184445386665813,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 670,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.78801707842928
+        },
+        {
+            "clearance": 0.18744178375795872,
+            "contact": [
+                -4.379224882908708,
+                4.086654630201825,
+                0.6296363165545418
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 670,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.80871523739705
+        },
+        {
+            "clearance": 0.08110788105722833,
+            "contact": [
+                -4.485558785609438,
+                3.979806360995429,
+                0.6889964661136508
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 671,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.84344194160758
+        },
+        {
+            "clearance": 0.010325655007776576,
+            "contact": [
+                -4.556390732510041,
+                3.8989879088241084,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 672,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.86521230627048
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -4.568012674045018,
+                4.0019935155906285,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 672,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.88698267093339
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -4.588478048366218,
+                3.927070478581415,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 673,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.90759487676104
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -4.574508468310761,
+                3.9028473016880576,
+                0.40000000000000013
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 673,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.92820708258867
+        },
+        {
+            "clearance": 0.09147561210500323,
+            "contact": [
+                -4.557700488758232,
+                3.8089648679701114,
+                0.7333333333333337
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 673,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.94881928841632
+        },
+        {
+            "clearance": 0.21380003700777017,
+            "contact": [
+                -4.617777096834204,
+                3.68619996299223,
+                0.7565653470458507
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 674,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.96943149424396
+        },
+        {
+            "clearance": 0.24540016045865531,
+            "contact": [
+                -4.64202443705475,
+                3.654599839541345,
+                0.767586865327917
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 674,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 85.97458454570088
+        },
+        {
+            "clearance": 0.1179450557691109,
+            "contact": [
+                -5.021772696250834,
+                -3.18262288191208,
+                0.7333333333333333
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 697,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.00950169491834
+        },
+        {
+            "clearance": 0.06710679355092916,
+            "contact": [
+                -5.124094567516201,
+                -3.2481257470934763,
+                0.7333333333333336
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 698,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.04395614831351
+        },
+        {
+            "clearance": 0.04585138130472277,
+            "contact": [
+                -5.131223069616994,
+                -3.270912191630657,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 699,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.0778206417019
+        },
+        {
+            "clearance": 0.058851146533020066,
+            "contact": [
+                -5.114025264961986,
+                -3.2736876402651234,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 700,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.09927311145074
+        },
+        {
+            "clearance": 0.1004248120972363,
+            "contact": [
+                -5.066748274365315,
+                -3.289927375482104,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 700,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.1207255811996
+        },
+        {
+            "clearance": 0.19054585978144978,
+            "contact": [
+                -4.976120806885216,
+                -3.339966952633887,
+                0.4222038625743818
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 701,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.14147543553061
+        },
+        {
+            "clearance": 0.04109409716760589,
+            "contact": [
+                -4.555843580372861,
+                -3.860356770753413,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 701,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.16222528986164
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -4.582541313511037,
+                -3.900000000000001,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 701,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.18297514419265
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -4.529057895373729,
+                -3.973042034292349,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 702,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.20372499852367
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -4.433333333333334,
+                -4.1027357241901665,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 702,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.2244748528547
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -4.433333333333334,
+                -4.124814600020151,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 702,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.24522470718571
+        },
+        {
+            "clearance": 0.006972496605147427,
+            "contact": [
+                -3.9759755086394244,
+                -4.493027503394853,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 703,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.28060625429059
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -4.306354637628864,
+                -4.314321964727386,
+                0.7749999999999999
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 704,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.29997117102162
+        },
+        {
+            "clearance": 0.06527581801551596,
+            "contact": [
+                -2.020961573648795,
+                -3.365275818015516,
+                0.3999999999999999
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 706,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.71637496010703
+        },
+        {
+            "clearance": 0.07351568562758315,
+            "contact": [
+                -2.0010687736002155,
+                -3.373515685627583,
+                0.7333333333333334
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 707,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.72949953602529
+        },
+        {
+            "clearance": 0.12589375845863193,
+            "contact": [
+                -1.8765339730645734,
+                -3.4258937584586318,
+                0.7333333333333335
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 708,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.74848032391638
+        },
+        {
+            "clearance": 0.17827183128968072,
+            "contact": [
+                -1.7519991725289314,
+                -3.4782718312896805,
+                0.525999586264466
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 708,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.76746111180749
+        },
+        {
+            "clearance": 0.2306499041207295,
+            "contact": [
+                -1.6274643719932893,
+                -3.5306499041207293,
+                0.7333333333333334
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 708,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.78644189969859
+        },
+        {
+            "clearance": 0.2100905749729468,
+            "contact": [
+                -1.109078931430857,
+                -3.920592477369041,
+                0.7999999999999998
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 709,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.80542268758968
+        },
+        {
+            "clearance": 0.09902766348926767,
+            "contact": [
+                -0.9947635655461962,
+                -3.928746213335245,
+                0.7333333333333332
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 709,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.82440347548079
+        },
+        {
+            "clearance": 0.002523564444448374,
+            "contact": [
+                -0.9022255851455125,
+                -3.9011896000442823,
+                0.7333333333333332
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 709,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.84338426337189
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -0.8999999999999996,
+                -3.8829386327321247,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 710,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.85915403449368
+        },
+        {
+            "clearance": 0.21283274301444743,
+            "contact": [
+                -0.68770172181403,
+                -4.000328660546736,
+                0.733333333333333
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 711,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.8981658391837
+        },
+        {
+            "clearance": 0.06780630419893843,
+            "contact": [
+                -0.5524149819496732,
+                -3.9430158640077635,
+                0.733333333333333
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 712,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.92556835006806
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -0.4337531695170124,
+                -3.8999999999999986,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 712,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.9529708609524
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -0.4904386852957861,
+                -3.8637459665318867,
+                0.40000000000000013
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 713,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 87.98037337183675
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -0.3914347786566049,
+                -3.873418438728266,
+                0.40000000000000013
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 713,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.0077758827211
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -0.2636329793879446,
+                -3.8954583605353776,
+                0.40000000000000013
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 714,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.04136104647368
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                -0.17933509039338183,
+                -3.8999999999999995,
+                0.40000000000000013
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 715,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.06499543686236
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                0.03238717456085195,
+                -3.9,
+                0.40000000000000013
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 716,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.10231901453237
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                0.04825301485485924,
+                -3.8999999999999995,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 717,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.12513335677423
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                0.19301406846042174,
+                -3.8999999999999995,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 718,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.15278788385461
+        },
+        {
+            "clearance": 0.004300768070074654,
+            "contact": [
+                0.3020273680340787,
+                -3.903792938814029,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 718,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.18044241093499
+        },
+        {
+            "clearance": 0.11898600239160725,
+            "contact": [
+                0.391977423652556,
+                -3.9754839208267145,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 719,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.20809693801536
+        },
+        {
+            "clearance": 0.095039893330081,
+            "contact": [
+                0.5734668310306321,
+                -3.960292670056232,
+                0.4000000000000003
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 719,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.23575146509575
+        },
+        {
+            "clearance": 0.19935985119864297,
+            "contact": [
+                0.6758196920294074,
+                -3.993977583309156,
+                0.4000000000000003
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 720,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.26823631787103
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                0.8610601411308496,
+                -3.8999999999999995,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 721,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.30406430203264
+        },
+        {
+            "clearance": 0.09310412892285999,
+            "contact": [
+                0.9890950963894967,
+                -3.9270267020154295,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 722,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.33181213139208
+        },
+        {
+            "clearance": 0.051877829161228614,
+            "contact": [
+                1.1516280232341642,
+                -3.9050849164608885,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 722,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.35955996075153
+        },
+        {
+            "clearance": 0.2220909271409356,
+            "contact": [
+                1.3219622129154533,
+                -3.9075601558181923,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 723,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.38730779011097
+        },
+        {
+            "clearance": 0.13389823296670045,
+            "contact": [
+                1.8997952585503184,
+                -3.4338982329667003,
+                0.7333333333333336
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 723,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.41505561947041
+        },
+        {
+            "clearance": 0.0842728508105326,
+            "contact": [
+                2.0196015309795197,
+                -3.3842728508105324,
+                0.4401992345102401
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 724,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.44726460884166
+        },
+        {
+            "clearance": 0.05969761220647074,
+            "contact": [
+                2.078931405039726,
+                -3.3596976122064706,
+                0.7333333333333338
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 725,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.46993056445282
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                2.0968767155611268,
+                -3.3,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 726,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.50569373047396
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                2.0935623555823977,
+                -3.2882840640959428,
+                0.39999999999999997
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 727,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.5333203078479
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                2.164671100054143,
+                -3.3,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 727,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.56094688522182
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                2.279819624271984,
+                -3.250465712507948,
+                0.43363395954669287
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 728,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.58857346259575
+        },
+        {
+            "clearance": 0.12274918932873735,
+            "contact": [
+                2.422749189328737,
+                -3.214874571218021,
+                0.6860414284544564
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 728,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.61620003996968
+        },
+        {
+            "clearance": 0.22815977992409797,
+            "contact": [
+                2.528159779924098,
+                -3.1339901797573506,
+                0.6411056554207506
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 729,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.6488027566517
+        },
+        {
+            "clearance": 0.24121000860313435,
+            "contact": [
+                2.541210008603134,
+                -3.1239763869653103,
+                0.6355424372029504
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 730,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.65453851350219
+        },
+        {
+            "clearance": 0.14437550196376578,
+            "contact": [
+                3.2752433293243355,
+                -2.238158741320712,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 733,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.78602044485197
+        },
+        {
+            "clearance": 0.05110763743882755,
+            "contact": [
+                3.257493895352059,
+                -2.1450361837583727,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 734,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.81345026673674
+        },
+        {
+            "clearance": 0.027873247769986707,
+            "contact": [
+                3.2579153432481345,
+                -2.113139358043514,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 734,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.8408800886215
+        },
+        {
+            "clearance": 0.06301160934100537,
+            "contact": [
+                3.2936316839311415,
+                -2.1182913046808376,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 735,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.87438529687213
+        },
+        {
+            "clearance": 0.12657398254600505,
+            "contact": [
+                3.359907315879338,
+                -2.0779351422852415,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 736,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.91023158390351
+        },
+        {
+            "clearance": 0.1519369559013799,
+            "contact": [
+                3.385270289234713,
+                -2.016703508313719,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 737,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.93325794150816
+        },
+        {
+            "clearance": 0.2248099142724076,
+            "contact": [
+                3.4581432476057405,
+                -1.8407726579193366,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 738,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.96085694045036
+        },
+        {
+            "clearance": 0.031016205976767353,
+            "contact": [
+                3.531016205976768,
+                -1.6648418075249545,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 738,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 88.98845593939254
+        },
+        {
+            "clearance": 0.1044758258967161,
+            "contact": [
+                3.6039727462388758,
+                -1.4897595783120345,
+                0.40000000000000036
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 739,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.01605493833472
+        },
+        {
+            "clearance": 0.2081420580395418,
+            "contact": [
+                3.6991795309003526,
+                -1.4395795498589121,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 739,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.04365393727691
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.8546575088656736,
+                -0.8992877299868162,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 740,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.07637505290259
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.8774938628370013,
+                -0.8394901244194668,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 741,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.11216912042289
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.9149801568748277,
+                -0.7849848209330461,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 742,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.14538950155583
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.9284564938068463,
+                -0.8999999999999997,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 743,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.17290196586288
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.9630152576992024,
+                -0.8127711946970241,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 743,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.20041443016994
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.9666666666666663,
+                -0.5322471932870781,
+                0.40000000000000013
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 744,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.22792689447701
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.966666666666666,
+                -0.3611364005586851,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 744,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.25543935878406
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.96434013733012,
+                -0.3009199338339204,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 745,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.27881684740782
+        },
+        {
+            "clearance": 0.10449605971216229,
+            "contact": [
+                4.032958265169625,
+                -0.2192234535072815,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 746,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.314635465531
+        },
+        {
+            "clearance": 0.1494328521639607,
+            "contact": [
+                4.061465864512901,
+                -0.18448684320144954,
+                0.4153671693911768
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 747,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.33756775655476
+        },
+        {
+            "clearance": 0.03582863495701538,
+            "contact": [
+                3.869161968290348,
+                0.2774148607620979,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 748,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.37015521646335
+        },
+        {
+            "clearance": 0.043541136633201444,
+            "contact": [
+                3.8747217980050994,
+                0.31352130065581807,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 749,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.39778201045928
+        },
+        {
+            "clearance": 0.12604922421296644,
+            "contact": [
+                3.930770701288219,
+                0.3799647813147436,
+                0.40000000000000013
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 749,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.4254088044552
+        },
+        {
+            "clearance": 0.15352518879781604,
+            "contact": [
+                4.116460767641695,
+                0.452640187120074,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 750,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.45303559845112
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.8325553988602694,
+                0.8211558147892262,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 750,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.48066239244706
+        },
+        {
+            "clearance": 0.013531160222458228,
+            "contact": [
+                3.843580194888338,
+                0.9088370880519764,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 751,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.51681290092945
+        },
+        {
+            "clearance": 0.06903195977481003,
+            "contact": [
+                4.053241611093103,
+                0.9690319597748099,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 752,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.54451542604755
+        },
+        {
+            "clearance": 0.2463841190230247,
+            "contact": [
+                3.980060314823249,
+                1.1463841190230246,
+                0.4545180387167054
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 752,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.57221795116565
+        },
+        {
+            "clearance": 0.0068790185533949,
+            "contact": [
+                3.5068790185533953,
+                1.723736278271239,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 753,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.59992047628376
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.465311565801376,
+                1.7458342746067577,
+                0.607270383056435
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 753,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.62762300140186
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.4534780100853624,
+                1.7963694488548823,
+                0.5827812122264706
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 754,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.65986777921714
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.3661795016583613,
+                2.013798190131293,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 755,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.68255891970057
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                3.3666666666666667,
+                2.0099920878138544,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 756,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.71830087203952
+        },
+        {
+            "clearance": 0.027504981534969865,
+            "contact": [
+                3.254594971579414,
+                2.1174489755668295,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 757,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.74608054511381
+        },
+        {
+            "clearance": 0.07570519257539618,
+            "contact": [
+                3.2690205140741586,
+                2.1667660191538287,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 757,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.77386021818812
+        },
+        {
+            "clearance": 0.1861915012381739,
+            "contact": [
+                3.2515832918383665,
+                2.2852949382683976,
+                0.40000000000000013
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 758,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.80163989126243
+        },
+        {
+            "clearance": 0.22143946869791847,
+            "contact": [
+                3.2550381968112,
+                2.3203731771305742,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 758,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.808584809531
+        },
+        {
+            "clearance": 0.2211870182309732,
+            "contact": [
+                2.521187018230973,
+                3.140048263104432,
+                0.4888620760530934
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 762,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.9441948429144
+        },
+        {
+            "clearance": 0.07571499846318641,
+            "contact": [
+                2.3757149984631862,
+                3.2517200354090163,
+                0.42682220255054665
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 763,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.97127931701357
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                2.2977484693497194,
+                3.141049984778148,
+                0.6456531945018271
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 763,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 89.99836379111275
+        },
+        {
+            "clearance": 0.0237882002707398,
+            "contact": [
+                2.1209793196593423,
+                3.3112136799825898,
+                0.4000000000000001
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 764,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 90.02544826521193
+        },
+        {
+            "clearance": -1,
+            "contact": [
+                2.061199422064022,
+                3.3,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 764,
+            "reason": "Physical intersection",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 90.0525327393111
+        },
+        {
+            "clearance": 0.00121123884987969,
+            "contact": [
+                2.100351604078615,
+                3.3011590833116555,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 765,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 90.08801395737937
+        },
+        {
+            "clearance": 0.05995068696873629,
+            "contact": [
+                2.077726618549775,
+                3.359950686968736,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 766,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 90.12346794301499
+        },
+        {
+            "clearance": 0.08524841909906122,
+            "contact": [
+                2.01665249082786,
+                3.385248419099061,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 767,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 90.14646466617825
+        },
+        {
+            "clearance": 0.1581572758255807,
+            "contact": [
+                1.8406532917385854,
+                3.4581572758255805,
+                0.4
+            ],
+            "first": "Nozzle [nozzle]",
+            "move": 768,
+            "reason": "Required clearance is not met",
+            "second": "Deposited support",
+            "status": 1,
+            "time": 90.1740692360498
+        }
+    ],
+    "fingerprint": "dbd41a6f5686be52b79fdb7849e8ba9af58fb819ec23801e8fad1e81ae1f9127",
+    "minimumClearance": -1,
+    "modeled": [
+        "Nozzle [nozzle]",
+        "Heat break [break]",
+        "Heater block [heater]",
+        "Fan shroud [fan]",
+        "Bed"
+    ],
+    "nativeFirmwareValidated": false,
+    "physicalPrintingValidated": false,
+    "status": 1
+}

@@ -1,0 +1,41 @@
+Generated 877 movements
+Validated 0%
+Validated 10%
+Validated 20%
+Validated 30%
+Validated 40%
+Validated 50%
+Validated 60%
+Validated 70%
+Validated 80%
+Validated 90%
+{
+    "checkedIntervals": 4670,
+    "controllerSemanticReplayValidated": true,
+    "deposition": {
+        "checked": true,
+        "coverage": 1,
+        "dependencies": [
+        ],
+        "unsupported": [
+        ]
+    },
+    "diagnostics": [
+        "Synthetic machine and material: geometric research demonstration.",
+        "Deposition support / gravity check: 0 flagged movements, 0 dependency edges, 100.0% sampled volume coverage."
+    ],
+    "events": [
+    ],
+    "fingerprint": "67c7cffdcda6483fce1b704d1f284f07c6604bbdf8ecd7978e36fc7dc4757e95",
+    "minimumClearance": 0.25483301927757424,
+    "modeled": [
+        "Nozzle [nozzle]",
+        "Heat break [break]",
+        "Heater block [heater]",
+        "Fan shroud [fan]",
+        "Bed"
+    ],
+    "nativeFirmwareValidated": false,
+    "physicalPrintingValidated": false,
+    "status": 0
+}

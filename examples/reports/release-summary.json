@@ -1,0 +1,43 @@
+{
+  "version": "0.1.0",
+  "date": "2026-10-13",
+  "platform": "Windows x64",
+  "checks": {
+    "coreCases": 33,
+    "desktopWorkflowCases": 1,
+    "flowUnitCases": 8,
+    "nativeKlipperBatchCases": 5,
+    "allPassed": true
+  },
+  "portableRuntime": {
+    "sdkOnPath": false,
+    "cliReplayPassed": true,
+    "nativeGuiCapturePassed": true
+  },
+  "benchmarks": [
+    {
+      "fixture": "curved-stress",
+      "exitCode": 124,
+      "seconds": 180.067
+    },
+    {
+      "fixture": "torus",
+      "exitCode": 2,
+      "seconds": 1.886
+    },
+    {
+      "fixture": "reference-klipper",
+      "exitCode": 0,
+      "seconds": 74.31
+    },
+    {
+      "fixture": "reference-head",
+      "exitCode": 0,
+      "seconds": 20.103
+    }
+  ],
+  "realFusionStudyQualified": false,
+  "nativeDuetFirmwareQualified": false,
+  "physicalPrintingValidated": false,
+  "scope": "Initial research alpha; incomplete roadmap features and qualification gaps are listed in docs/VALIDATION.md."
+}
