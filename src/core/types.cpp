@@ -1,4 +1,5 @@
 #include "types.h"
+#include "plate.h"
 #include <QCryptographicHash>
 #include <QJsonDocument>
 #include <QStringList>
@@ -62,13 +63,17 @@ Vec3 part_position(const MachineProfile &m, const JointState &q) {
 }
 Vec3 part_direction(const MachineProfile &m, const ToolheadAssembly &t, const JointState &q) {
     Vec3 axis = (t.mount.linear() * t.axis).normalized();
-    if(!m.rotary_axes())return axis;
+    if (!m.rotary_axes())
+        return axis;
     if (m.layout == Layout::RotaryBed)
         return workpiece_pose(m, q).linear().transpose() * axis;
     return (head_a(m, q) * head_b(m, q)).linear() * axis;
 }
 bool in_limits(const MachineProfile &m, const JointState &q) {
-    if(!m.rotary_axes())return q.xyz.allFinite() && (q.xyz.array()>=m.minXYZ.array()-1e-8).all() && (q.xyz.array()<=m.maxXYZ.array()+1e-8).all() && std::isfinite(q.a) && std::isfinite(q.b) && std::abs(q.a)<1e-10 && std::abs(q.b)<1e-10;
+    if (!m.rotary_axes())
+        return q.xyz.allFinite() && (q.xyz.array() >= m.minXYZ.array() - 1e-8).all() &&
+               (q.xyz.array() <= m.maxXYZ.array() + 1e-8).all() && std::isfinite(q.a) && std::isfinite(q.b) &&
+               std::abs(q.a) < 1e-10 && std::abs(q.b) < 1e-10;
     return q.xyz.allFinite() && (q.xyz.array() >= m.minXYZ.array() - 1e-8).all() &&
            (q.xyz.array() <= m.maxXYZ.array() + 1e-8).all() && std::isfinite(q.a) && std::isfinite(q.b) &&
            q.a >= m.minA - 1e-8 && q.a <= m.maxA + 1e-8 && q.b >= m.minB - 1e-8 && q.b <= m.maxB + 1e-8;
@@ -100,39 +105,54 @@ std::vector<JointState> inverse_kinematics(const MachineProfile &m, const Vec3 &
         throw std::runtime_error("Invalid target pose");
     Vec3 n = normal.normalized();
     std::vector<JointState> result;
-    if(!m.rotary_axes()) {
-        Vec3 axis=(t.mount.linear()*t.axis).normalized();
-        if((axis-Vec3::UnitZ()).norm()>1e-6 || (n-axis).norm()>1e-6)return result;
-        JointState q;q.xyz=p;if(in_limits(m,t,q))result.push_back(q);return result;
+    if (!m.rotary_axes()) {
+        Vec3 axis = (t.mount.linear() * t.axis).normalized();
+        if ((axis - Vec3::UnitZ()).norm() > 1e-6 || (n - axis).norm() > 1e-6)
+            return result;
+        JointState q;
+        q.xyz = p;
+        if (in_limits(m, t, q))
+            result.push_back(q);
+        return result;
     }
     std::vector<std::pair<double, double>> branches;
-    Vec3 mounted=(t.mount.linear()*t.axis).normalized();
-    if((mounted-Vec3::UnitZ()).norm()>1e-10) {
-        if(m.layout==Layout::RotaryBed) {
-            double radius=std::hypot(mounted.y(),mounted.z());
-            if(radius<1e-10) {
-                if(std::abs(n.z())>1e-8)return result;
-                Vec3 target=rotation_x(-previous.a).linear()*mounted;
-                branches.push_back({previous.a,std::atan2(target.y(),target.x())-std::atan2(n.y(),n.x())});
-            }else if(std::abs(n.z())<=radius+1e-10) {
-                double phase=std::atan2(mounted.y(),mounted.z()),angle=std::acos(std::clamp(n.z()/radius,-1.0,1.0));
-                for(double a:{angle-phase,-angle-phase}) {
-                    Vec3 target=rotation_x(-a).linear()*mounted;
-                    double b=std::hypot(n.x(),n.y())<1e-9?previous.b:std::atan2(target.y(),target.x())-std::atan2(n.y(),n.x());
-                    branches.push_back({a,b});
+    Vec3 mounted = (t.mount.linear() * t.axis).normalized();
+    if ((mounted - Vec3::UnitZ()).norm() > 1e-10) {
+        if (m.layout == Layout::RotaryBed) {
+            double radius = std::hypot(mounted.y(), mounted.z());
+            if (radius < 1e-10) {
+                if (std::abs(n.z()) > 1e-8)
+                    return result;
+                Vec3 target = rotation_x(-previous.a).linear() * mounted;
+                branches.push_back(
+                    {previous.a, std::atan2(target.y(), target.x()) - std::atan2(n.y(), n.x())});
+            } else if (std::abs(n.z()) <= radius + 1e-10) {
+                double phase = std::atan2(mounted.y(), mounted.z()),
+                       angle = std::acos(std::clamp(n.z() / radius, -1.0, 1.0));
+                for (double a : {angle - phase, -angle - phase}) {
+                    Vec3 target = rotation_x(-a).linear() * mounted;
+                    double b = std::hypot(n.x(), n.y()) < 1e-9
+                                   ? previous.b
+                                   : std::atan2(target.y(), target.x()) - std::atan2(n.y(), n.x());
+                    branches.push_back({a, b});
                 }
             }
-        }else {
-            double radius=std::hypot(mounted.x(),mounted.z());
-            if(radius<1e-10) {
-                if(std::abs(n.x())>1e-8)return result;
-                branches.push_back({std::atan2(n.z(),n.y())-std::atan2(mounted.z(),mounted.y()),previous.b});
-            }else if(std::abs(n.x())<=radius+1e-10) {
-                double phase=std::atan2(mounted.z(),mounted.x()),angle=std::acos(std::clamp(n.x()/radius,-1.0,1.0));
-                for(double b:{phase+angle,phase-angle}) {
-                    Vec3 tilted=rotation_y(b).linear()*mounted;
-                    double a=std::hypot(n.y(),n.z())<1e-9?previous.a:std::atan2(n.z(),n.y())-std::atan2(tilted.z(),tilted.y());
-                    branches.push_back({a,b});
+        } else {
+            double radius = std::hypot(mounted.x(), mounted.z());
+            if (radius < 1e-10) {
+                if (std::abs(n.x()) > 1e-8)
+                    return result;
+                branches.push_back(
+                    {std::atan2(n.z(), n.y()) - std::atan2(mounted.z(), mounted.y()), previous.b});
+            } else if (std::abs(n.x()) <= radius + 1e-10) {
+                double phase = std::atan2(mounted.z(), mounted.x()),
+                       angle = std::acos(std::clamp(n.x() / radius, -1.0, 1.0));
+                for (double b : {phase + angle, phase - angle}) {
+                    Vec3 tilted = rotation_y(b).linear() * mounted;
+                    double a = std::hypot(n.y(), n.z()) < 1e-9
+                                   ? previous.a
+                                   : std::atan2(n.z(), n.y()) - std::atan2(tilted.z(), tilted.y());
+                    branches.push_back({a, b});
                 }
             }
         }
@@ -170,7 +190,8 @@ JointState interpolate(const JointState &a, const JointState &b, double u) {
 }
 double movement_bound(const MachineProfile &m, const ToolheadAssembly &t, const JointState &a,
                       const JointState &b, double radius) {
-    if(!m.rotary_axes())return (b.xyz-a.xyz).norm();
+    if (!m.rotary_axes())
+        return (b.xyz - a.xyz).norm();
     const double rotation = std::abs(b.a - a.a) + std::abs(b.b - a.b);
     if (m.layout == Layout::RotaryBed) {
         double lever = radius + std::max((a.xyz - m.bedPivot).norm(), (b.xyz - m.bedPivot).norm());
@@ -187,15 +208,24 @@ QString role_name(Role r) {
         return "Outer wall";
     case Role::SolidInfill:
         return "Solid infill";
-    case Role::TopSurface: return "Top surface";
-    case Role::BottomSurface: return "Bottom surface";
-    case Role::Brim: return "Brim";
-    case Role::Skirt: return "Skirt";
-    case Role::Bridge: return "Bridge";
+    case Role::TopSurface:
+        return "Top surface";
+    case Role::BottomSurface:
+        return "Bottom surface";
+    case Role::Brim:
+        return "Brim";
+    case Role::Skirt:
+        return "Skirt";
+    case Role::Bridge:
+        return "Bridge";
     case Role::Infill:
         return "Infill";
     case Role::Support:
         return "Support";
+    case Role::SupportInterface:
+        return "Support interface";
+    case Role::Purge:
+        return "Purge";
     case Role::Retract:
         return "Retract";
     default:
@@ -203,9 +233,13 @@ QString role_name(Role r) {
     }
 }
 QString layout_name(Layout layout) {
-    return layout==Layout::RotaryBed?"Rotary bed":layout==Layout::TiltingHead?"Tilting head":"Standard XYZ · fixed nozzle";
+    return layout == Layout::RotaryBed     ? "Rotary bed"
+           : layout == Layout::TiltingHead ? "Tilting head"
+                                           : "Standard XYZ · fixed nozzle";
 }
-Vec3 surface_normal(const Sample &sample) {return sample.surfaceNormal.value_or(sample.direction);}
+Vec3 surface_normal(const Sample &sample) {
+    return sample.surfaceNormal.value_or(sample.direction);
+}
 void Project::invalidate() {
     report = CollisionReport{};
     depositionValid = false;
@@ -220,11 +254,19 @@ QString Project::fingerprint() const {
     json.remove("comparison");
     json.remove("deposition");
     json.remove("filament");
+    auto job = json["plateJob"].toObject();
+    job.remove("compute");
+    job.remove("computation");
+    json["plateJob"] = job;
     return QString::fromLatin1(QCryptographicHash::hash(QJsonDocument(json).toJson(QJsonDocument::Compact),
                                                         QCryptographicHash::Sha256)
                                    .toHex());
 }
 void time_path(Project &p) {
+    if (p.plateEnabled) {
+        time_plate(p);
+        return;
+    }
     if (p.path.empty())
         return;
     p.path.front().time = 0;
@@ -245,6 +287,8 @@ void time_path(Project &p) {
     }
 }
 SimulationState simulation_at(const Project &p, double time, bool rebuildDeposition) {
+    if (p.plateEnabled)
+        return simulate_plate(p, time, rebuildDeposition);
     SimulationState s;
     if (p.path.empty())
         return s;
@@ -256,8 +300,8 @@ SimulationState simulation_at(const Project &p, double time, bool rebuildDeposit
     s.move = next;
     double dt = p.path[next].time - p.path[previous].time;
     s.fraction = dt > 0 ? (s.time - p.path[previous].time) / dt : 0;
-    s.joint =
-        interpolate_motion(p.machine, p.active_toolhead(), p.path[previous].joint, p.path[next].joint, s.fraction);
+    s.joint = interpolate_motion(p.machine, p.active_toolhead(), p.path[previous].joint, p.path[next].joint,
+                                 s.fraction);
     for (int i = 1; rebuildDeposition && i <= next; ++i)
         if (p.path[i].deltaE > 0) {
             Vec3 end = p.path[i].position;
@@ -269,26 +313,40 @@ SimulationState simulation_at(const Project &p, double time, bool rebuildDeposit
 }
 std::vector<ToolpathSegment> simulation_toolpaths(const Project &p) {
     std::vector<ToolpathSegment> result;
-    for (size_t i=1; i<p.path.size(); ++i) {
-        const auto &a=p.path[i-1], &b=p.path[i];
-        int count=1;
-        for (int attempt=0; attempt<12; ++attempt) {
-            bool good=true;
-            for(int j=0;j<count;++j) {
-                auto point=[&](double u) { return part_position(p.machine,interpolate_motion(p.machine,p.active_toolhead(),a.joint,b.joint,u)); };
-                double u=double(j)/count, v=double(j+1)/count;
-                if ((point((u+v)/2)-(point(u)+point(v))/2).norm()>p.machine.chordTolerance ||
-                    std::max(std::abs(b.joint.a-a.joint.a),std::abs(b.joint.b-a.joint.b))/count>p.machine.angularTolerance) { good=false; break; }
+    for (size_t i = 1; i < p.path.size(); ++i) {
+        const auto &a = p.path[i - 1], &b = p.path[i];
+        int count = 1;
+        for (int attempt = 0; attempt < 12; ++attempt) {
+            bool good = true;
+            for (int j = 0; j < count; ++j) {
+                auto point = [&](double u) {
+                    return part_position(p.machine,
+                                         (p.plateEnabled ? sample_motion(p, a, b, u)
+                                                         : interpolate_motion(p.machine, p.active_toolhead(),
+                                                                              a.joint, b.joint, u)));
+                };
+                double u = double(j) / count, v = double(j + 1) / count;
+                if ((point((u + v) / 2) - (point(u) + point(v)) / 2).norm() > p.machine.chordTolerance ||
+                    std::max(std::abs(b.joint.a - a.joint.a), std::abs(b.joint.b - a.joint.b)) / count >
+                        p.machine.angularTolerance) {
+                    good = false;
+                    break;
+                }
             }
-            if (good || count>=2048) break;
-            count*=2;
+            if (good || count >= 2048)
+                break;
+            count *= 2;
         }
-        for (int j=0;j<count;++j) {
-            double u=double(j)/count, v=double(j+1)/count;
-            Vec3 start=part_position(p.machine,interpolate_motion(p.machine,p.active_toolhead(),a.joint,b.joint,u));
-            Vec3 end=part_position(p.machine,interpolate_motion(p.machine,p.active_toolhead(),a.joint,b.joint,v));
-            if ((end-start).norm()>1e-9)
-                result.push_back({start,end,int(i),b.layer,b.deltaE>0?b.role:Role::Travel,u,v});
+        for (int j = 0; j < count; ++j) {
+            double u = double(j) / count, v = double(j + 1) / count;
+            Vec3 start = part_position(
+                p.machine, interpolate_motion(p.machine, p.active_toolhead(), a.joint, b.joint, u));
+            Vec3 end = part_position(
+                p.machine,
+                (p.plateEnabled ? sample_motion(p, a, b, v)
+                                : interpolate_motion(p.machine, p.active_toolhead(), a.joint, b.joint, v)));
+            if ((end - start).norm() > 1e-9)
+                result.push_back({start, end, int(i), b.layer, b.deltaE > 0 ? b.role : Role::Travel, u, v});
         }
     }
     return result;

@@ -7,10 +7,10 @@
 #include <QOpenGLShaderProgram>
 #include <QOpenGLWidget>
 #include <QPoint>
-#include <map>
-#include <set>
 #include <array>
 #include <limits>
+#include <map>
+#include <set>
 QColor toolpath_color(fiveaxis::Role role);
 class Viewport : public QOpenGLWidget, protected QOpenGLFunctions {
     Q_OBJECT
@@ -19,22 +19,68 @@ class Viewport : public QOpenGLWidget, protected QOpenGLFunctions {
     ~Viewport() override;
     void set_project(const fiveaxis::Project *p);
     void set_time(double t);
-    void set_axis_pose(const fiveaxis::JointState &joint,bool enabled);
-    const fiveaxis::JointState &displayed_joint() const {return state.joint;}
-    bool axis_pose_active() const {return axisOverride;}
-    void set_rotary_axes_visible(bool value){rotaryAxesVisible=value;update();}
+    void set_axis_pose(const fiveaxis::JointState &joint, bool enabled);
+    const fiveaxis::JointState &displayed_joint() const {
+        return state.joint;
+    }
+    bool axis_pose_active() const {
+        return axisOverride;
+    }
+    void set_color_mode(int value) {
+        colorMode = value;
+        set_project(project);
+    }
+    void set_rotary_axes_visible(bool value) {
+        rotaryAxesVisible = value;
+        update();
+    }
     void set_stress(bool v);
-    void set_path_mode(int mode) { pathMode = mode; update_path_legend(); update(); }
-    void set_travel_paths(bool value) { travelPaths = value; update_path_legend(); update(); }
-    void set_deposited_visible(bool value) { depositedVisible = value; update(); }
-    void set_prepare(bool value) { prepare=value; set_time(time); update_path_legend(); update(); }
-    void set_toolhead_visible(bool value) { toolheadVisible=value;update(); }
-    void set_layer_range(int low,int high) { firstLayer=low;lastLayer=high;update(); }
-    void set_role_visible(fiveaxis::Role role,bool value) { if(int(role)>=0 && int(role)<fiveaxis::role_count) visibleRoles[int(role)]=value;update(); }
-    int first_layer() const { return firstLayer; }
-    int last_layer() const { return lastLayer; }
-    int path_mode() const { return pathMode; }
-    size_t toolpath_segment_count() const { return pathSegments.size(); }
+    void set_path_mode(int mode) {
+        pathMode = mode;
+        update_path_legend();
+        update();
+    }
+    void set_travel_paths(bool value) {
+        travelPaths = value;
+        update_path_legend();
+        update();
+    }
+    void set_deposited_visible(bool value) {
+        depositedVisible = value;
+        update();
+    }
+    void set_prepare(bool value) {
+        prepare = value;
+        set_time(time);
+        update_path_legend();
+        update();
+    }
+    void set_toolhead_visible(bool value) {
+        toolheadVisible = value;
+        update();
+    }
+    void set_layer_range(int low, int high) {
+        firstLayer = low;
+        lastLayer = high;
+        update();
+    }
+    void set_role_visible(fiveaxis::Role role, bool value) {
+        if (int(role) >= 0 && int(role) < fiveaxis::role_count)
+            visibleRoles[int(role)] = value;
+        update();
+    }
+    int first_layer() const {
+        return firstLayer;
+    }
+    int last_layer() const {
+        return lastLayer;
+    }
+    int path_mode() const {
+        return pathMode;
+    }
+    size_t toolpath_segment_count() const {
+        return pathSegments.size();
+    }
     void set_follow(bool v) {
         follow = v;
         update();
@@ -72,20 +118,28 @@ class Viewport : public QOpenGLWidget, protected QOpenGLFunctions {
     bool stressVisible = false;
     bool validationCurrent = false;
     int pathMode = 0;
+    int colorMode = 0;
+    std::map<QString, fiveaxis::ToolheadAssembly> renderTools;
+    std::vector<std::pair<fiveaxis::Mesh, QString>> paintMeshes;
+    const fiveaxis::ToolheadAssembly &display_assembly() const;
+    QColor sample_color(const fiveaxis::Sample &s) const;
     bool travelPaths = true, depositedVisible = true;
-    bool prepare=false;
-    bool toolheadVisible=true;
-    bool axisOverride=false,rotaryAxesVisible=true;
+    bool prepare = false;
+    bool toolheadVisible = true;
+    bool axisOverride = false, rotaryAxesVisible = true;
     fiveaxis::JointState axisJoint;
-    int firstLayer=0,lastLayer=std::numeric_limits<int>::max();
-    std::array<bool,fiveaxis::role_count> visibleRoles;
-    struct BeadRange { int begin,end,layer; fiveaxis::Role role; };
+    int firstLayer = 0, lastLayer = std::numeric_limits<int>::max();
+    std::array<bool, fiveaxis::role_count> visibleRoles;
+    struct BeadRange {
+        int begin, end, layer;
+        fiveaxis::Role role;
+    };
     std::vector<BeadRange> beadRanges;
     std::vector<QVector3D> beadColors;
     std::vector<fiveaxis::ToolpathSegment> pathSegments;
     QOpenGLBuffer pathBuffer;
     bool pathsUploaded = false;
-    std::map<int, std::vector<std::pair<int,int>>> layerRanges;
+    std::map<int, std::vector<std::pair<int, int>>> layerRanges;
     double fieldMin = 0, fieldMax = 1;
     std::set<int> fixed, loaded;
     QMatrix4x4 view_projection() const;
@@ -97,11 +151,12 @@ class Viewport : public QOpenGLWidget, protected QOpenGLFunctions {
     fiveaxis::Mesh beads, unitBox, fixedMesh, loadedMesh, marker;
     fiveaxis::Mesh rotaryRing;
     std::vector<int> beadEnds;
-    void draw_mesh(const fiveaxis::Mesh &, const fiveaxis::Transform &, QVector4D, int triangles = -1,int firstTriangle=0);
+    void draw_mesh(const fiveaxis::Mesh &, const fiveaxis::Transform &, QVector4D, int triangles = -1,
+                   int firstTriangle = 0);
     void draw_paths(const fiveaxis::Transform &);
     void pick(QPoint);
     QLabel *hud, *pathLegend, *axesLegend;
-    std::array<QLabel*,2> rotaryLabels;
+    std::array<QLabel *, 2> rotaryLabels;
     void draw_rotary_axes();
     void update_path_legend();
 };

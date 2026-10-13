@@ -1,4 +1,5 @@
 #include "stress.h"
+#include "compute.h"
 #include "geometry.h"
 #include "slicing.h"
 #include <Eigen/Eigenvalues>
@@ -6,8 +7,8 @@
 #include <Eigen/SparseCholesky>
 #include <QFile>
 #include <algorithm>
-#include <set>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <vtkCell.h>
 #include <vtkCellData.h>
@@ -82,13 +83,17 @@ static bool same_mesh(const VolumeMesh &a, const VolumeMesh &b) {
             return false;
     return true;
 }
-static std::optional<double> result_time(vtkUnstructuredGrid* grid) {
-    if(grid->GetInformation()->Has(vtkDataObject::DATA_TIME_STEP()))return grid->GetInformation()->Get(vtkDataObject::DATA_TIME_STEP());
-    for(const char* name:{"TimeValue","Time","TIME_STEP"})if(auto array=grid->GetFieldData()->GetArray(name)) {
-        if(array->GetNumberOfTuples()!=1||array->GetNumberOfComponents()!=1||!std::isfinite(array->GetComponent(0,0)))
-            throw std::runtime_error("Invalid FEM result step metadata");
-        return array->GetComponent(0,0);
-    }return {};
+static std::optional<double> result_time(vtkUnstructuredGrid *grid) {
+    if (grid->GetInformation()->Has(vtkDataObject::DATA_TIME_STEP()))
+        return grid->GetInformation()->Get(vtkDataObject::DATA_TIME_STEP());
+    for (const char *name : {"TimeValue", "Time", "TIME_STEP"})
+        if (auto array = grid->GetFieldData()->GetArray(name)) {
+            if (array->GetNumberOfTuples() != 1 || array->GetNumberOfComponents() != 1 ||
+                !std::isfinite(array->GetComponent(0, 0)))
+                throw std::runtime_error("Invalid FEM result step metadata");
+            return array->GetComponent(0, 0);
+        }
+    return {};
 }
 StressField import_vtu(const QStringList &filenames, const VtuOptions &o) {
     if ((filenames.size() != 1 && filenames.size() != 6) || o.resultStep.trimmed().isEmpty() ||
@@ -106,9 +111,11 @@ StressField import_vtu(const QStringList &filenames, const VtuOptions &o) {
     std::optional<double> time;
     for (auto &file : filenames) {
         auto g = read_vtu(file);
-        auto currentTime=result_time(g);
-        if(grids.empty())time=currentTime;
-        else if(time.has_value()!=currentTime.has_value()||(time&&std::abs(*time-*currentTime)>1e-12*(1+std::abs(*time))))
+        auto currentTime = result_time(g);
+        if (grids.empty())
+            time = currentTime;
+        else if (time.has_value() != currentTime.has_value() ||
+                 (time && std::abs(*time - *currentTime) > 1e-12 * (1 + std::abs(*time))))
             throw std::runtime_error("FEM component files represent different result steps");
         auto mesh = vtk_mesh(g, o);
         if (grids.empty())
@@ -117,9 +124,12 @@ StressField import_vtu(const QStringList &filenames, const VtuOptions &o) {
             throw std::runtime_error("FEM component files have different meshes or node ordering");
         grids.push_back(g);
     }
-    if(time){bool numeric;double requested=o.resultStep.toDouble(&numeric);
-        if(numeric&&std::abs(requested-*time)>1e-12*(1+std::abs(*time)))throw std::runtime_error("Selected FEM step does not match VTU metadata");
-        out.step+=" @ VTU time "+QString::number(*time,'g',17);
+    if (time) {
+        bool numeric;
+        double requested = o.resultStep.toDouble(&numeric);
+        if (numeric && std::abs(requested - *time) > 1e-12 * (1 + std::abs(*time)))
+            throw std::runtime_error("Selected FEM step does not match VTU metadata");
+        out.step += " @ VTU time " + QString::number(*time, 'g', 17);
     }
     size_t count = out.pointData ? out.mesh.vertices.size() : out.mesh.cells.size();
     out.tensors.assign(count, Mat3::Zero());
@@ -265,6 +275,55 @@ Mat3 StressField::sample(const Vec3 &p, bool *covered) const {
     }
     return Mat3::Zero();
 }
+std::vector<Mat3> sample_stress_batch(const StressField &field, const std::vector<Vec3> &points,
+                                      const ComputeSettings &compute, ComputeReport &report,
+                                      std::atomic_bool *cancel) {
+    std::vector<double> input(points.size() * 32);
+    std::vector<Mat3> reference(points.size());
+    parallel_for(
+        points.size(), compute,
+        [&](size_t i) {
+            bool covered = false;
+            reference[i] = field.sample(points[i], &covered);
+            if (!covered)
+                throw std::runtime_error("FEM field does not cover the sampled volume");
+            Eigen::Vector4d weights;
+            const Tetrahedron *cell = nullptr;
+            size_t cellIndex = 0;
+            for (size_t k = 0; k < field.mesh.cells.size(); ++k)
+                if (barycentric(field.mesh, field.mesh.cells[k], points[i], weights)) {
+                    cell = &field.mesh.cells[k];
+                    cellIndex = k;
+                    break;
+                }
+            if (!cell)
+                throw std::runtime_error("Stress sampling correspondence failed");
+            bool linear = field.pointData && cell->nodes.size() == 4;
+            for (int half = 0; half < 2; ++half) {
+                size_t base = (i * 2 + half) * 16;
+                for (int n = 0; n < 4; ++n) {
+                    input[base + n] = linear ? weights[n] : (n == 0 ? 1 : 0);
+                    const auto &tensor = linear ? field.tensors.at(cell->nodes[n]) : reference[i];
+                    for (int c = 0; c < 3; ++c)
+                        input[base + 4 + n * 3 + c] = half == 0 ? tensor(c, c) : tensor(c, (c + 1) % 3);
+                }
+            }
+        },
+        cancel);
+    auto samples = compute_workload(input, 2, Transform::Identity(), compute, report, cancel);
+    // CPU correspondence and the quadratic reference stay authoritative. The plugin
+    // evaluates batched nodal interpolation only after tetrahedra are identified.
+    for (size_t i = 0; i < points.size(); ++i) {
+        Mat3 tensor = Mat3::Zero();
+        for (int c = 0; c < 3; ++c) {
+            tensor(c, c) = samples[i * 2][c];
+            tensor(c, (c + 1) % 3) = tensor((c + 1) % 3, c) = samples[i * 2 + 1][c];
+        }
+        if ((tensor - reference[i]).norm() > 1e-8 * std::max(1., reference[i].norm()))
+            throw std::runtime_error("Stress interpolation parity failed");
+    }
+    return reference;
+}
 Vec3 principal_tensile_direction(const Mat3 &tensor, double *confidence) {
     Eigen::SelfAdjointEigenSolver<Mat3> solver(tensor);
     if (solver.info() != Eigen::Success)
@@ -312,7 +371,9 @@ static Eigen::Matrix<double, 6, 6> orthotropic_stiffness(const Material &materia
     }
     return (global + global.transpose()) / 2;
 }
-FEAResult solve_fea(const VolumeMesh &mesh, const LoadCase &loads, const std::vector<Mat3> &materialFrames) {
+FEAResult solve_fea(const VolumeMesh &mesh, const LoadCase &loads, const std::vector<Mat3> &materialFrames,
+                    const std::vector<Material> &cellMaterials, const ComputeSettings &compute,
+                    std::atomic_bool *cancel) {
     if (mesh.cells.empty() || loads.fixedNodes.empty() || loads.nodalForces.empty())
         throw std::runtime_error("FEA requires a volume mesh, fixed nodes, and forces");
     double E = loads.material.young, nu = loads.material.poisson;
@@ -342,46 +403,69 @@ FEAResult solve_fea(const VolumeMesh &mesh, const LoadCase &loads, const std::ve
     if (!materialFrames.empty() && materialFrames.size() != mesh.cells.size())
         throw std::runtime_error("Material orientation field does not cover the volume");
     std::vector<Eigen::Triplet<double>> triplets;
-    std::vector<Eigen::Matrix<double, 6, 12>> Bs;
-    std::vector<Eigen::Matrix<double, 6, 6>> Ds;
-    for (auto &t : mesh.cells) {
-        if (t.nodes.size() != 4)
-            throw std::runtime_error(
-                "Built-in FEA requires linear tetrahedra; imported quadratic results remain supported");
-        Eigen::Matrix4d M;
-        for (int j = 0; j < 4; ++j) {
-            auto v = mesh.vertices[t.nodes[j]];
-            M.row(j) << 1, v.transpose();
-        }
-        double volume = std::abs(M.determinant()) / 6;
-        if (volume < 1e-12)
-            throw std::runtime_error("Degenerate FEA tetrahedron");
-        auto inv = M.inverse().eval();
-        Eigen::Matrix<double, 6, 12> B = Eigen::Matrix<double, 6, 12>::Zero();
-        for (int j = 0; j < 4; ++j) {
-            Vec3 g = inv.col(j).tail<3>();
-            B(0, 3 * j) = g.x();
-            B(1, 3 * j + 1) = g.y();
-            B(2, 3 * j + 2) = g.z();
-            B(3, 3 * j) = g.y();
-            B(3, 3 * j + 1) = g.x();
-            B(4, 3 * j + 1) = g.z();
-            B(4, 3 * j + 2) = g.y();
-            B(5, 3 * j) = g.z();
-            B(5, 3 * j + 2) = g.x();
-        }
-        auto cellD =
-            materialFrames.empty() ? D : orthotropic_stiffness(loads.material, materialFrames[Bs.size()]);
-        Ds.push_back(cellD);
-        Bs.push_back(B);
-        Eigen::Matrix<double, 12, 12> K = B.transpose() * cellD * B * volume;
-        for (int a = 0; a < 12; ++a)
-            for (int b = 0; b < 12; ++b) {
-                int row = 3 * t.nodes[a / 3] + a % 3, col = 3 * t.nodes[b / 3] + b % 3;
-                if (!fixed.count(row) && !fixed.count(col))
-                    triplets.emplace_back(row, col, K(a, b));
+    std::vector<Eigen::Matrix<double, 6, 12>> Bs(mesh.cells.size());
+    std::vector<Eigen::Matrix<double, 6, 6>> Ds(mesh.cells.size());
+    if (!cellMaterials.empty() && cellMaterials.size() != mesh.cells.size())
+        throw std::runtime_error("Material properties do not cover every tetrahedron");
+    std::vector<std::vector<Eigen::Triplet<double>>> elements(mesh.cells.size());
+    parallel_for(
+        mesh.cells.size(), compute,
+        [&](size_t cell) {
+            const auto &t = mesh.cells[cell];
+            if (t.nodes.size() != 4)
+                throw std::runtime_error(
+                    "Built-in FEA requires linear tetrahedra; imported quadratic results remain supported");
+            Eigen::Matrix4d M;
+            for (int j = 0; j < 4; ++j) {
+                auto v = mesh.vertices[t.nodes[j]];
+                M.row(j) << 1, v.transpose();
             }
-    }
+            double volume = std::abs(M.determinant()) / 6;
+            if (volume < 1e-12)
+                throw std::runtime_error("Degenerate FEA tetrahedron");
+            auto inv = M.inverse().eval();
+            Eigen::Matrix<double, 6, 12> B = Eigen::Matrix<double, 6, 12>::Zero();
+            for (int j = 0; j < 4; ++j) {
+                Vec3 g = inv.col(j).tail<3>();
+                B(0, 3 * j) = g.x();
+                B(1, 3 * j + 1) = g.y();
+                B(2, 3 * j + 2) = g.z();
+                B(3, 3 * j) = g.y();
+                B(3, 3 * j + 1) = g.x();
+                B(4, 3 * j + 1) = g.z();
+                B(4, 3 * j + 2) = g.y();
+                B(5, 3 * j) = g.z();
+                B(5, 3 * j + 2) = g.x();
+            }
+            Material property = cellMaterials.empty() ? loads.material : cellMaterials[cell];
+            if (property.young <= 0 || property.poisson <= -1 || property.poisson >= .499 ||
+                !std::isfinite(property.young) || !std::isfinite(property.poisson))
+                throw std::runtime_error("Invalid element material");
+            Eigen::Matrix<double, 6, 6> cellD = D;
+            if (!cellMaterials.empty()) {
+                double lambda = property.young * property.poisson /
+                                ((1 + property.poisson) * (1 - 2 * property.poisson)),
+                       mu = property.young / (2 * (1 + property.poisson));
+                cellD.setZero();
+                cellD.topLeftCorner<3, 3>().setConstant(lambda);
+                cellD.diagonal().head<3>().array() += 2 * mu;
+                cellD.diagonal().tail<3>().setConstant(mu);
+            }
+            if (!materialFrames.empty())
+                cellD = orthotropic_stiffness(property, materialFrames[cell]);
+            Ds[cell] = cellD;
+            Bs[cell] = B;
+            Eigen::Matrix<double, 12, 12> K = B.transpose() * cellD * B * volume;
+            for (int a = 0; a < 12; ++a)
+                for (int b = 0; b < 12; ++b) {
+                    int row = 3 * t.nodes[a / 3] + a % 3, col = 3 * t.nodes[b / 3] + b % 3;
+                    if (!fixed.count(row) && !fixed.count(col))
+                        elements[cell].emplace_back(row, col, K(a, b));
+                }
+        },
+        cancel);
+    for (auto &element : elements)
+        triplets.insert(triplets.end(), element.begin(), element.end());
     for (int i : fixed)
         triplets.emplace_back(i, i, 1);
     Eigen::SparseMatrix<double> K(dofs, dofs);

@@ -3,9 +3,8 @@
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
-#include <BRep_Tool.hxx>
 #include <BRep_Builder.hxx>
-#include <TopoDS_Compound.hxx>
+#include <BRep_Tool.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <Interface_Static.hxx>
 #include <Poly_Triangulation.hxx>
@@ -20,6 +19,7 @@
 #include <TDocStd_Document.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
+#include <TopoDS_Compound.hxx>
 #include <XCAFApp_Application.hxx>
 #include <XCAFDoc_DocumentTool.hxx>
 #include <XCAFDoc_ShapeTool.hxx>
@@ -31,10 +31,12 @@
 namespace fiveaxis {
 static std::mutex stepMutex;
 ToolheadAssembly load_step_assembly(const QString &filename, double deflection, std::atomic_bool *cancel) {
-    StepImportOptions options; options.linearDeflection=deflection;
-    return load_step_assembly(filename,options,cancel);
+    StepImportOptions options;
+    options.linearDeflection = deflection;
+    return load_step_assembly(filename, options, cancel);
 }
-ToolheadAssembly load_step_assembly(const QString &filename, const StepImportOptions &options, std::atomic_bool *cancel) {
+ToolheadAssembly load_step_assembly(const QString &filename, const StepImportOptions &options,
+                                    std::atomic_bool *cancel) {
     std::lock_guard<std::mutex> lock(stepMutex);
     QFile input(filename);
     if (!input.open(QIODevice::ReadOnly))
@@ -44,15 +46,16 @@ ToolheadAssembly load_step_assembly(const QString &filename, const StepImportOpt
     out.sourceStep = input.readAll();
     out.sourceHash =
         QString::fromLatin1(QCryptographicHash::hash(out.sourceStep, QCryptographicHash::Sha256).toHex());
-    double deflection=options.linearDeflection;
+    double deflection = options.linearDeflection;
     if (deflection <= 0 || !std::isfinite(deflection) || !std::isfinite(options.angularDeflection) ||
-        options.angularDeflection<=0 || options.angularDeflection>pi || !std::isfinite(options.renderDeflection) || options.renderDeflection<=0)
+        options.angularDeflection <= 0 || options.angularDeflection > pi ||
+        !std::isfinite(options.renderDeflection) || options.renderDeflection <= 0)
         throw std::runtime_error("Invalid STEP tessellation tolerance");
     QString cacheRoot = QCoreApplication::applicationDirPath() + "/cache/step";
-    QString cached =
-        cacheRoot + "/" + out.sourceHash + "-" + QString::number(deflection, 'g', 12) + "-"+
-        QString::number(options.angularDeflection,'g',12)+"-"+QString::number(options.renderDeflection,'g',12)+
-        (options.splitCompounds?"-split":"-whole")+"-v3.5axis";
+    QString cached = cacheRoot + "/" + out.sourceHash + "-" + QString::number(deflection, 'g', 12) + "-" +
+                     QString::number(options.angularDeflection, 'g', 12) + "-" +
+                     QString::number(options.renderDeflection, 'g', 12) +
+                     (options.splitCompounds ? "-split" : "-whole") + "-v3.5axis";
     if (QFile::exists(cached))
         try {
             auto stored = load_project(cached);
@@ -86,37 +89,41 @@ ToolheadAssembly load_step_assembly(const QString &filename, const StepImportOpt
     auto shapes = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
     TDF_LabelSequence roots;
     shapes->GetFreeShapes(roots);
-    std::function<void(TDF_Label, TopLoc_Location, QString, int)> visit =
-        [&](TDF_Label instance, TopLoc_Location parent, QString path, int depth) {
-            if (cancel && cancel->load())
-                throw std::runtime_error("STEP import cancelled");
-            if (depth > 64)
-                throw std::runtime_error("STEP assembly nesting too deep");
-            TDF_Label definition = instance;
-            if (shapes->IsReference(instance))
-                shapes->GetReferredShape(instance, definition);
-            TopLoc_Location placement = parent * shapes->GetLocation(instance);
-            Handle(TDataStd_Name) n;
-            QString name = "Component";
-            if (definition.FindAttribute(TDataStd_Name::GetID(), n))
-                name = QString::fromUtf16(reinterpret_cast<const char16_t *>(n->Get().ToExtString()));
-            QString id = path + "/" + QString::number(instance.Tag());
-            TDF_LabelSequence children;
-            if (shapes->GetComponents(definition, children)) {
-                for (int j = 1; j <= children.Length(); ++j)
-                    visit(children.Value(j), placement, id, depth + 1);
-                return;
-            }
-            TopoDS_Shape shape = shapes->GetShape(definition);
-            std::vector<TopoDS_Shape> pieces;
-            if(options.splitCompounds && (shape.ShapeType()==TopAbs_COMPOUND || shape.ShapeType()==TopAbs_COMPSOLID))
-                for(TopExp_Explorer ex(shape,TopAbs_SOLID);ex.More();ex.Next()) pieces.push_back(ex.Current());
-            if(pieces.empty()) pieces.push_back(shape);
-            for(size_t piece=0;piece<pieces.size();++piece) {
-            auto part=pieces[piece];
+    std::function<void(TDF_Label, TopLoc_Location, QString, int)> visit = [&](TDF_Label instance,
+                                                                              TopLoc_Location parent,
+                                                                              QString path, int depth) {
+        if (cancel && cancel->load())
+            throw std::runtime_error("STEP import cancelled");
+        if (depth > 64)
+            throw std::runtime_error("STEP assembly nesting too deep");
+        TDF_Label definition = instance;
+        if (shapes->IsReference(instance))
+            shapes->GetReferredShape(instance, definition);
+        TopLoc_Location placement = parent * shapes->GetLocation(instance);
+        Handle(TDataStd_Name) n;
+        QString name = "Component";
+        if (definition.FindAttribute(TDataStd_Name::GetID(), n))
+            name = QString::fromUtf16(reinterpret_cast<const char16_t *>(n->Get().ToExtString()));
+        QString id = path + "/" + QString::number(instance.Tag());
+        TDF_LabelSequence children;
+        if (shapes->GetComponents(definition, children)) {
+            for (int j = 1; j <= children.Length(); ++j)
+                visit(children.Value(j), placement, id, depth + 1);
+            return;
+        }
+        TopoDS_Shape shape = shapes->GetShape(definition);
+        std::vector<TopoDS_Shape> pieces;
+        if (options.splitCompounds &&
+            (shape.ShapeType() == TopAbs_COMPOUND || shape.ShapeType() == TopAbs_COMPSOLID))
+            for (TopExp_Explorer ex(shape, TopAbs_SOLID); ex.More(); ex.Next())
+                pieces.push_back(ex.Current());
+        if (pieces.empty())
+            pieces.push_back(shape);
+        for (size_t piece = 0; piece < pieces.size(); ++piece) {
+            auto part = pieces[piece];
             Component comp;
-            comp.id = id+(pieces.size()>1?"/solid/"+QString::number(piece):QString{});
-            comp.name = name+(pieces.size()>1?" · solid "+QString::number(piece+1):QString{});
+            comp.id = id + (pieces.size() > 1 ? "/solid/" + QString::number(piece) : QString{});
+            comp.name = name + (pieces.size() > 1 ? " · solid " + QString::number(piece + 1) : QString{});
             comp.mesh.name = name;
             comp.mesh.error = deflection;
             comp.nozzle = name.contains("nozzle", Qt::CaseInsensitive);
@@ -124,7 +131,8 @@ ToolheadAssembly load_step_assembly(const QString &filename, const StepImportOpt
                 for (int j = 0; j < 4; ++j)
                     comp.assemblyPlacement.matrix()(i, j) = placement.Transformation().Value(i + 1, j + 1);
             auto tessellate = [&](double tolerance) {
-                BRepMesh_IncrementalMesh mesher(part, tolerance, false, options.angularDeflection, true);
+                // Object-level work owns the CPU budget; avoid nested OCCT workers.
+                BRepMesh_IncrementalMesh mesher(part, tolerance, false, options.angularDeflection, false);
                 if (!mesher.IsDone())
                     throw std::runtime_error("STEP tessellation failed");
                 Mesh mesh;
@@ -156,8 +164,8 @@ ToolheadAssembly load_step_assembly(const QString &filename, const StepImportOpt
             comp.mesh = tessellate(deflection);
             if (!comp.mesh.empty())
                 out.components.push_back(std::move(comp));
-            }
-        };
+        }
+    };
     for (int i = 1; i <= roots.Length(); ++i)
         visit(roots.Value(i), TopLoc_Location{}, "root", 0);
     if (out.components.empty())
@@ -188,8 +196,15 @@ void write_demo_step(const QString &filename, bool nested, bool inches, bool com
     add(BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1)), 0.4, 2).Shape(), "Nozzle", root);
     add(BRepPrimAPI_MakeBox(gp_Pnt(-5, -4, 8), 10, 8, 8).Shape(), "Heater block", root);
     add(BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(0, 0, 2), gp_Dir(0, 0, 1)), 1, 8).Shape(), "Heat break", root);
-    TopoDS_Shape fanShape=BRepPrimAPI_MakeBox(gp_Pnt(7,-6,12),8,12,12).Shape();
-    if(compound) {TopoDS_Compound solids;BRep_Builder builder;builder.MakeCompound(solids);builder.Add(solids,fanShape);builder.Add(solids,BRepPrimAPI_MakeBox(gp_Pnt(7,8,12),8,3,12).Shape());fanShape=solids;}
+    TopoDS_Shape fanShape = BRepPrimAPI_MakeBox(gp_Pnt(7, -6, 12), 8, 12, 12).Shape();
+    if (compound) {
+        TopoDS_Compound solids;
+        BRep_Builder builder;
+        builder.MakeCompound(solids);
+        builder.Add(solids, fanShape);
+        builder.Add(solids, BRepPrimAPI_MakeBox(gp_Pnt(7, 8, 12), 8, 3, 12).Shape());
+        fanShape = solids;
+    }
     auto fan = add(fanShape, "Fan shroud", root);
     if (nested) {
         auto sub = st->NewShape();

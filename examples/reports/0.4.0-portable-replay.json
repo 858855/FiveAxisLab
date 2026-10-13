@@ -1,0 +1,45 @@
+{
+    "checkedIntervals": 5076,
+    "compute": {
+        "backend": "CPU",
+        "batches": 0,
+        "cpuMilliseconds": 0,
+        "device": "",
+        "fallback": "",
+        "gpuMilliseconds": 0,
+        "milliseconds": 0,
+        "precision": "FP64 CPU"
+    },
+    "controllerSemanticReplayValidated": true,
+    "deposition": {
+        "checked": true,
+        "coverage": 1,
+        "dependencies": [
+        ],
+        "unsupported": [
+        ]
+    },
+    "diagnostics": [
+        "Synthetic machine and material: geometric research demonstration.",
+        "Deposition support / gravity check: 0 flagged movements, 0 dependency edges, 100.0% sampled volume coverage.",
+        "Legacy schema 1 imported; validate the migrated job again.",
+        "Deposition support / gravity check: 0 flagged movements, 0 dependency edges, 100.0% sampled volume coverage."
+    ],
+    "dummyToolhead": false,
+    "events": [
+    ],
+    "fingerprint": "6592179c7f842dedd4d8e7913d0c35636e15fa0d3046c411dd350a27f58fddc7",
+    "jobEvents": 0,
+    "minimumClearance": 0.25203942198785656,
+    "modeled": [
+        "Nozzle [root/1/1]",
+        "Heater block [root/1/2]",
+        "Heat break [root/1/3]",
+        "Fan shroud [root/1/4]",
+        "Bed"
+    ],
+    "nativeFirmwareValidated": false,
+    "physicalPrintingValidated": false,
+    "plate": false,
+    "status": 0
+}

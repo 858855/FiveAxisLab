@@ -52,10 +52,19 @@ class FiveAxisFlow:
         gcode.register_command('FIVEAXIS_DISABLE', self.disable)
 
     def connect(self):
-        extruder = self.printer.lookup_object('extruder')
-        self.native = extruder.check_move
-        self.extruder = extruder
-        extruder.check_move = self.check_move
+        self.select_extruder('extruder')
+
+    def select_extruder(self, name):
+        incoming = self.printer.lookup_object(name)
+        if not hasattr(incoming, 'check_move') or not hasattr(incoming, 'filament_area'):
+            raise self.printer.command_error('Unknown FiveAxisLab extruder')
+        if getattr(self, 'extruder', None) is incoming and incoming.check_move == self.check_move:
+            return
+        if self.native is not None:
+            self.extruder.check_move = self.native
+        self.extruder = incoming
+        self.native = incoming.check_move
+        incoming.check_move = self.check_move
 
     def enable(self, gcmd):
         self.layout = gcmd.get('LAYOUT', 'BED').upper()
@@ -68,10 +77,14 @@ class FiveAxisFlow:
         self.pivot_b=tuple(gcmd.get_float('PIVOT_B'+k,0.) for k in 'XYZ')
         self.max_flow = gcmd.get_float('MAX_FLOW', 10., above=0.)
         self.indices()
+        self.select_extruder(gcmd.get('EXTRUDER', 'extruder'))
         self.enabled = True
 
     def disable(self, gcmd):
         self.enabled = False
+        if self.native is not None:
+            self.extruder.check_move = self.native
+            self.native = None
 
     def indices(self):
         axes = self.printer.lookup_object('toolhead').get_extra_axes()

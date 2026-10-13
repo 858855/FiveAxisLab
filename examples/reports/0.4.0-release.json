@@ -1,0 +1,141 @@
+{
+  "version": "0.4.0",
+  "qtSuites": [
+    {
+      "suite": "plate",
+      "tests": 33,
+      "failures": 0,
+      "skipped": 0,
+      "seconds": 55.665
+    },
+    {
+      "suite": "core",
+      "tests": 55,
+      "failures": 0,
+      "skipped": 0,
+      "seconds": 6.908
+    },
+    {
+      "suite": "desktop",
+      "tests": 12,
+      "failures": 0,
+      "skipped": 0,
+      "seconds": 9.448
+    }
+  ],
+  "pythonTests": 11,
+  "pythonFailures": 0,
+  "qtCountsIncludeInitializationAndCleanup": true,
+  "actualGPU": "NVIDIA GeForce RTX 5090",
+  "driver": "595.97",
+  "AMDHardwareValidated": false,
+  "computeSummary": [
+    {
+      "requested": 0,
+      "actual": [
+        "CPU"
+      ],
+      "medianEndToEndMs": 18.4441
+    },
+    {
+      "requested": 1,
+      "actual": [
+        "CPU"
+      ],
+      "medianEndToEndMs": 6.7095
+    },
+    {
+      "requested": 2,
+      "actual": [
+        "CUDA"
+      ],
+      "medianEndToEndMs": 109.6925
+    },
+    {
+      "requested": 3,
+      "actual": [
+        "Vulkan"
+      ],
+      "medianEndToEndMs": 190.9502
+    }
+  ],
+  "jobs": [
+    {
+      "fixture": "plate-sequential",
+      "geometryValidated": true,
+      "controllerReplayValidated": true,
+      "compute": {
+        "backend": "CPU",
+        "batches": 0,
+        "cpuMilliseconds": 0.0059,
+        "device": "",
+        "fallback": "Small batch uses CPU",
+        "gpuMilliseconds": 0,
+        "milliseconds": 48.0443,
+        "precision": "FP64 CPU"
+      }
+    },
+    {
+      "fixture": "plate-shared-nozzle",
+      "geometryValidated": true,
+      "controllerReplayValidated": true,
+      "compute": {
+        "backend": "CPU",
+        "batches": 0,
+        "cpuMilliseconds": 0.0094,
+        "device": "",
+        "fallback": "Small batch uses CPU",
+        "gpuMilliseconds": 0,
+        "milliseconds": 28.1164,
+        "precision": "FP64 CPU"
+      }
+    },
+    {
+      "fixture": "plate-two-tools",
+      "geometryValidated": true,
+      "controllerReplayValidated": true,
+      "compute": {
+        "backend": "CPU",
+        "batches": 0,
+        "cpuMilliseconds": 0.0047,
+        "device": "",
+        "fallback": "Small batch uses CPU",
+        "gpuMilliseconds": 0,
+        "milliseconds": 168.6775,
+        "precision": "FP64 CPU"
+      }
+    },
+    {
+      "fixture": "plate-cuda",
+      "geometryValidated": true,
+      "controllerReplayValidated": true,
+      "compute": {
+        "backend": "CUDA",
+        "batches": 1,
+        "cpuMilliseconds": 0.0069,
+        "device": "NVIDIA GeForce RTX 5090",
+        "fallback": "",
+        "gpuMilliseconds": 103.5994,
+        "milliseconds": 1039.9961,
+        "precision": "FP64 with CPU verification"
+      }
+    },
+    {
+      "fixture": "plate-vulkan",
+      "geometryValidated": true,
+      "controllerReplayValidated": true,
+      "compute": {
+        "backend": "Vulkan",
+        "batches": 1,
+        "cpuMilliseconds": 0.0029,
+        "device": "NVIDIA GeForce RTX 5090",
+        "fallback": "",
+        "gpuMilliseconds": 196.3442,
+        "milliseconds": 1764.415,
+        "precision": "FP64 with CPU verification"
+      }
+    }
+  ],
+  "nativeKlipperRerun": "Timed out after 120 seconds at Starting Klippy; no new native qualification",
+  "physicalPrintingValidated": false
+}

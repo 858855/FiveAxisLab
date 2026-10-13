@@ -1,0 +1,68 @@
+Generated 3272 movements
+Validated 0%
+Validated 10%
+Validated 20%
+Validated 30%
+{
+    "checkedIntervals": 20170,
+    "compute": {
+        "backend": "CPU",
+        "batches": 0,
+        "cpuMilliseconds": 0.0094,
+        "device": "",
+        "fallback": "Small batch uses CPU",
+        "gpuMilliseconds": 0,
+        "milliseconds": 28.1164,
+        "precision": "FP64 CPU"
+    },
+    "controllerSemanticReplayValidated": true,
+    "deposition": {
+        "checked": true,
+        "coverage": 1,
+        "dependencies": [
+        ],
+        "unsupported": [
+        ]
+    },
+    "diagnostics": [
+        "Synthetic machine and material: geometric research demonstration.",
+        "Support generation disabled; unsupported deposition is still checked.",
+        "Deposition support / gravity check: 0 flagged movements, 54 dependency edges, 100.0% sampled volume coverage.",
+        "4 layers, 79 independently scheduled curves, 1033 coordinated movements.",
+        "Research scalar-field solver uses stress-weighted diffusion with bounded spacing; material behavior and strength require calibration.",
+        "Support generation disabled; unsupported deposition is still checked.",
+        "Deposition support / gravity check: 0 flagged movements, 54 dependency edges, 100.0% sampled volume coverage.",
+        "4 layers, 79 independently scheduled curves, 1033 coordinated movements.",
+        "Research scalar-field solver uses stress-weighted diffusion with bounded spacing; material behavior and strength require calibration.",
+        "Plate planned: tool changes, purge, and object transitions require full collision validation.",
+        "Support generation disabled; unsupported deposition is still checked.",
+        "Deposition support / gravity check: 0 flagged movements, 54 dependency edges, 100.0% sampled volume coverage.",
+        "4 layers, 79 independently scheduled curves, 1033 coordinated movements.",
+        "Research scalar-field solver uses stress-weighted diffusion with bounded spacing; material behavior and strength require calibration.",
+        "Support generation disabled; unsupported deposition is still checked.",
+        "Deposition support / gravity check: 0 flagged movements, 54 dependency edges, 100.0% sampled volume coverage.",
+        "4 layers, 79 independently scheduled curves, 1033 coordinated movements.",
+        "Research scalar-field solver uses stress-weighted diffusion with bounded spacing; material behavior and strength require calibration.",
+        "Plate planned: tool changes, purge, and object transitions require full collision validation."
+    ],
+    "dummyToolhead": false,
+    "events": [
+    ],
+    "fingerprint": "77c93a6fe21d252420e2bb37898b780dfd6ad3a3d1a086639783b384197e9d16",
+    "jobEvents": 11,
+    "minimumClearance": 0.25003960077185505,
+    "modeled": [
+        "tool/tool-1/nozzle",
+        "tool/tool-1/break",
+        "tool/tool-1/heater",
+        "tool/tool-1/fan",
+        "Bed",
+        "deposited/object-1",
+        "deposited/object-2",
+        "deposited/purge-tower"
+    ],
+    "nativeFirmwareValidated": false,
+    "physicalPrintingValidated": false,
+    "plate": true,
+    "status": 0
+}

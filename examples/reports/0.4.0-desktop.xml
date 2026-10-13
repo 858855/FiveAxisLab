@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="DesktopTests" timestamp="2026-10-13T21:19:48" tests="12" failures="0" errors="0" skipped="0" time="9.448">
+  <properties>
+    <property name="QTestVersion" value="6.11.2" />
+    <property name="QtVersion" value="6.11.2" />
+    <property name="QtBuild" value="Qt 6.11.2 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 16.2.0)" />
+  </properties>
+  <testcase name="initTestCase" classname="DesktopTests" time="0.000" />
+  <testcase name="plate_editor_and_preview" classname="DesktopTests" time="2.043" />
+  <testcase name="cartesian_workspace" classname="DesktopTests" time="0.959" />
+  <testcase name="spiral_profile_preview(bed)" classname="DesktopTests" time="1.469" />
+  <testcase name="spiral_profile_preview(head)" classname="DesktopTests" time="1.188" />
+  <testcase name="rotary_axis_preview(rotary-bed)" classname="DesktopTests" time="0.793" />
+  <testcase name="rotary_axis_preview(tilting-head)" classname="DesktopTests" time="0.728" />
+  <testcase name="inline_workspace_and_layer_filters" classname="DesktopTests" time="0.340" />
+  <testcase name="step_parameters_preview" classname="DesktopTests" time="0.325" />
+  <testcase name="toolpaths_dummy_and_process_controls" classname="DesktopTests" time="0.899" />
+  <testcase name="playback_and_background_replay" classname="DesktopTests" time="0.699" />
+  <testcase name="cleanupTestCase" classname="DesktopTests" time="0.000" />
+</testsuite>

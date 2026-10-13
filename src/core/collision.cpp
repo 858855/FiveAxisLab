@@ -1,8 +1,10 @@
 #include "collision.h"
+#include "compute.h"
+#include "geometry.h"
+#include "nonplanar.h"
+#include "plate.h"
 #include "process.h"
 #include "profile.h"
-#include "nonplanar.h"
-#include "geometry.h"
 #include "slicing.h"
 #include "stress.h"
 #include <algorithm>
@@ -100,6 +102,7 @@ struct CollisionScene::Impl {
         const Mesh *solid = nullptr;
         double error = 0;
         bool deposited = false, bed = false;
+        QString objectId;
         Vec3 center = Vec3::Zero();
         double radius = 0;
     };
@@ -108,12 +111,23 @@ struct CollisionScene::Impl {
         size_t first, second;
         Eigen::AlignedBox3d box;
         std::shared_ptr<fcl::CollisionGeometryd> outside;
+        Transform regionFrame = Transform::Identity();
     };
     std::map<std::pair<size_t, size_t>, Interface> interfaces;
+    struct FixtureInterface {
+        Eigen::AlignedBox3d box;
+        std::shared_ptr<fcl::CollisionGeometryd> outside;
+        Transform regionFrame = Transform::Identity();
+    };
+    QString activeObject;
+    std::map<std::pair<QString, QString>, FixtureInterface> fixtureInterfaces;
     bool movingPairs = false;
     std::vector<std::unique_ptr<Obstacle>> world, part;
     fcl::DynamicAABBTreeCollisionManagerd worldManager, partManager;
     double radius = 1;
+    mutable size_t checkedStaticBodies = 0;
+    mutable double staticBodyClearance = 1e100;
+    mutable std::optional<CollisionEvent> staticBodyConflict;
     explicit Impl(const Project &p) : project(p) {
         for (auto &c : p.active_toolhead().components) {
             if (c.visualOnly)
@@ -131,9 +145,9 @@ struct CollisionScene::Impl {
             }
             tools.push_back(t);
             for (auto &v : c.mesh.vertices)
-                radius =
-                    std::max(radius, p.machine.layout == Layout::RotaryBed ? (v - p.active_toolhead().tcp).norm()
-                                                                           : (p.active_toolhead().mount * v).norm());
+                radius = std::max(radius, p.machine.layout == Layout::RotaryBed
+                                              ? (v - p.active_toolhead().tcp).norm()
+                                              : (p.active_toolhead().mount * v).norm());
         }
         for (size_t i = 0; i < tools.size(); ++i)
             for (size_t j = i + 1; j < tools.size(); ++j)
@@ -146,20 +160,42 @@ struct CollisionScene::Impl {
                         return i;
                 throw std::runtime_error("Interface references a missing physical component");
             };
-            size_t a = find(rule.first), b = find(rule.second);
+            size_t a = find(rule.first);
+            if (rule.second.startsWith("fixture:")) {
+                if (rule.size.minCoeff() <= 0)
+                    throw std::runtime_error("Invalid fixture interface box");
+                QString target = rule.second.mid(8);
+                if (std::none_of(p.fixtures.begin(), p.fixtures.end(),
+                                 [&](const Fixture &f) { return f.name == target; }))
+                    throw std::runtime_error("Unknown interface fixture");
+                std::vector<std::pair<Vec3, double>> planes;
+                for (int j = 0; j < 3; ++j) {
+                    Vec3 n = rule.regionFrame.linear() * Vec3::Unit(j);
+                    Vec3 center = rule.regionFrame * rule.center;
+                    planes.emplace_back(n, n.dot(center) + rule.size[j] / 2);
+                    planes.emplace_back(-n, -n.dot(center) + rule.size[j] / 2);
+                }
+                auto mask = subtract_region(tools[a].component->mesh, planes);
+                fixtureInterfaces[{rule.first, target}] = {
+                    Eigen::AlignedBox3d(rule.center - rule.size / 2, rule.center + rule.size / 2),
+                    mask.empty() ? nullptr : geometry(mask), rule.regionFrame};
+                continue;
+            }
+            size_t b = find(rule.second);
             if (a == b || rule.size.minCoeff() <= 0 || interfaces.count({a, b}) || interfaces.count({b, a}))
                 throw std::runtime_error("Invalid or duplicate interface pair");
             std::vector<std::pair<Vec3, double>> planes;
             for (int j = 0; j < 3; ++j) {
-                Vec3 n = Vec3::Unit(j);
-                planes.emplace_back(n, rule.center[j] + rule.size[j] / 2);
-                planes.emplace_back(-n, -rule.center[j] + rule.size[j] / 2);
+                Vec3 n = rule.regionFrame.linear() * Vec3::Unit(j);
+                Vec3 center = rule.regionFrame * rule.center;
+                planes.emplace_back(n, n.dot(center) + rule.size[j] / 2);
+                planes.emplace_back(-n, -n.dot(center) + rule.size[j] / 2);
             }
             auto mask = subtract_region(tools[a].component->mesh, planes);
             interfaces.emplace(
                 std::make_pair(a, b),
                 Interface{a, b, Eigen::AlignedBox3d(rule.center - rule.size / 2, rule.center + rule.size / 2),
-                          mask.empty() ? nullptr : geometry(mask)});
+                          mask.empty() ? nullptr : geometry(mask), rule.regionFrame});
         }
         for (auto &fixture : p.fixtures) {
             if (fixture.mesh.empty())
@@ -194,7 +230,7 @@ struct CollisionScene::Impl {
 CollisionScene::CollisionScene(const Project &p) : impl(std::make_unique<Impl>(p)) {}
 CollisionScene::~CollisionScene() = default;
 void CollisionScene::deposit(const Vec3 &a, const Vec3 &b, double width, double height, Role role,
-                             const Vec3 &normal) {
+                             const Vec3 &normal, const QString &objectId) {
     double length = (b - a).norm();
     if (length < 1e-10)
         return;
@@ -202,10 +238,18 @@ void CollisionScene::deposit(const Vec3 &a, const Vec3 &b, double width, double 
     for (int i = 0; i < count; ++i) {
         Vec3 x = a + (b - a) * double(i) / count, y = a + (b - a) * double(i + 1) / count;
         auto o = std::make_unique<Impl::Obstacle>();
-        o->name = role == Role::Support ? "Deposited support" : "Deposited part";
+        o->name = (role == Role::Support || role == Role::SupportInterface) ? "Deposited support"
+                  : role == Role::Purge                                     ? "Deposited purge"
+                                                                            : "Deposited part";
+        o->objectId = objectId;
+        if (!objectId.isEmpty())
+            o->name += "/" + objectId;
         o->deposited = true;
         o->center = (x + y) / 2 - normal.normalized() * height / 2;
         o->radius = Vec3(((y - x).norm() + width) / 2, width / 2, height / 2).norm();
+        if (impl->project.checkWorkpieceBodies && impl->project.machine.layout == Layout::RotaryBed)
+            impl->radius =
+                std::max(impl->radius, (o->center - impl->project.machine.bedPivot).norm() + o->radius);
         Transform pose = translation(o->center);
         Vec3 tangent = (y - x).normalized(), side = normal.cross(tangent);
         if (side.norm() < 1e-8)
@@ -228,6 +272,9 @@ void CollisionScene::deposit(const Vec3 &a, const Vec3 &b, double width, double 
     }
     if (impl->part.size() % 128 == 0)
         impl->partManager.update();
+}
+void CollisionScene::set_active_object(const QString &id) {
+    impl->activeObject = id;
 }
 CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, const Vec3 &activePoint,
                                           double margin) const {
@@ -254,6 +301,8 @@ CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, c
         Vec3 active;
         Transform transform;
         double required;
+        const std::map<std::pair<QString, QString>, Impl::FixtureInterface> *interfaces;
+        QString activeObject;
     };
     auto callback = [](fcl::CollisionObjectd *first, fcl::CollisionObjectd *second, void *data,
                        double &distance) -> bool {
@@ -271,6 +320,8 @@ CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, c
         double raw = d.min_distance;
         if (!std::isfinite(raw))
             raw = 0;
+        auto rule = query.interfaces->find({query.tool->component->id, obstacle->name});
+        const Impl::FixtureInterface *interface = rule == query.interfaces->end() ? nullptr : &rule->second;
         bool tipNearby = query.tool->component->nozzle && (obstacle->deposited || obstacle->bed);
         double allowance = query.assembly->contactRadius + obstacle->radius + query.required +
                            query.tool->component->mesh.error + obstacle->error;
@@ -279,7 +330,10 @@ CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, c
                 (obstacle->center - query.active).norm() <= allowance &&
                 (obstacle->center - query.active)
                         .dot(first->getTransform().linear() * query.assembly->axis.normalized()) < -1e-7;
-        bool contactAllowed = query.extruding && tipNearby;
+        bool contactAllowed = query.extruding && tipNearby &&
+                              (!obstacle->deposited || obstacle->objectId == query.activeObject);
+        if (obstacle->deposited && obstacle->objectId != query.activeObject)
+            tipNearby = false;
         double clearance = raw - query.tool->component->mesh.error - obstacle->error;
         if (tipNearby && query.tool->masked) {
             fcl::CollisionObjectd masked(query.tool->masked, first->getTransform());
@@ -311,11 +365,30 @@ CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, c
             if (obstacle->bed && raw <= 0)
                 clearance = -1;
         }
+        if (interface) {
+            if (interface->outside) {
+                fcl::CollisionObjectd masked(interface->outside, first->getTransform());
+                fcl::DistanceResultd outside;
+                fcl::distance(&masked, second, request, outside);
+                clearance = outside.min_distance - query.tool->component->mesh.error - obstacle->error;
+            } else
+                clearance = 1e100;
+        }
         if (obstacle->solid) {
             Transform inverse = first->getTransform().inverse();
-            Vec3 worldPoint = first->getTransform() * query.tool->component->mesh.vertices.front();
-            if (contains(*obstacle->solid, worldPoint))
-                clearance = -1;
+            // STEP compounds may have disconnected islands. Test every witness,
+            // with a cheap box rejection, rather than relying on the first vertex.
+            if (first->getAABB().overlap(second->getAABB())) {
+                const auto bounds = obstacle->solid->bounds();
+                for (const auto &vertex : query.tool->component->mesh.vertices) {
+                    Vec3 worldPoint = first->getTransform() * vertex;
+                    if (bounds.contains(worldPoint) && contains(*obstacle->solid, worldPoint) &&
+                        !(interface && interface->box.contains(interface->regionFrame.inverse() * vertex))) {
+                        clearance = -1;
+                        break;
+                    }
+                }
+            }
             for (const auto &v : obstacle->solid->vertices) {
                 Vec3 local = inverse * v;
                 if (!query.tool->bounds.contains(local))
@@ -326,7 +399,8 @@ CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, c
                     bool inContact = contactAllowed && h >= -1e-6 && h <= query.assembly->contactHeight &&
                                      (delta - query.assembly->axis.normalized() * h).norm() <=
                                          query.assembly->contactRadius;
-                    if (!inContact) {
+                    if (!inContact &&
+                        !(interface && interface->box.contains(interface->regionFrame.inverse() * local))) {
                         clearance = -1;
                         break;
                     }
@@ -384,7 +458,9 @@ CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, c
                         extruding,
                         frame == 0 ? bed * activePoint : activePoint,
                         frame == 0 ? Transform::Identity() : bed,
-                        required};
+                        required,
+                        &impl->fixtureInterfaces,
+                        impl->activeObject};
             if (frame == 0)
                 impl->worldManager.distance(&object, &query, callback);
             else
@@ -425,11 +501,12 @@ CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, c
                     if (!container.bounds.contains(local) || !contains(container.component->mesh, local))
                         continue;
                     Vec3 interfacePoint = ta.inverse() * point;
-                    if (!rule || !rule->box.contains(interfacePoint)) {
+                    if (!rule || !rule->box.contains(rule->regionFrame.inverse() * interfacePoint)) {
                         clearance = -1;
                         witness = point;
                         return;
                     }
+                    interfacePoint = rule->regionFrame.inverse() * interfacePoint;
                     double inside = (interfacePoint - rule->box.min())
                                         .cwiseMin(rule->box.max() - interfacePoint)
                                         .minCoeff();
@@ -454,6 +531,85 @@ CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, c
             }
         }
 
+    if (p.checkWorkpieceBodies && !impl->world.empty()) {
+        struct Pair {
+            const Impl::Obstacle *moving, *fixed;
+            Transform pose;
+            double lower;
+        };
+        std::vector<Pair> pairs;
+        std::vector<double> bounds;
+        bool stationary = p.machine.layout != Layout::RotaryBed;
+        if (stationary) {
+            result.clearance = std::min(result.clearance, impl->staticBodyClearance);
+            if (impl->staticBodyConflict)
+                return *impl->staticBodyConflict;
+        }
+        for (size_t index = stationary ? impl->checkedStaticBodies : 0; index < impl->part.size(); ++index) {
+            const auto &moving = impl->part[index];
+            fcl::CollisionObjectd body(*moving->object);
+            auto pose = bed * moving->object->getTransform();
+            body.setTransform(pose);
+            body.computeAABB();
+            auto a = body.getAABB();
+            for (const auto &fixed : impl->world) {
+                const auto &b = fixed->object->getAABB();
+                double error = moving->error + fixed->error;
+                Vec3 gap = Vec3::Zero();
+                for (int k = 0; k < 3; ++k) {
+                    gap[k] = std::max({0., a.min_[k] - b.max_[k], b.min_[k] - a.max_[k]});
+                    bounds.push_back(a.min_[k] - b.max_[k] - required - error - 1e-9);
+                    bounds.push_back(a.max_[k] - b.min_[k] + required + error + 1e-9);
+                    bounds.push_back(0);
+                }
+                pairs.push_back({moving.get(), fixed.get(), pose, gap.norm() - error});
+            }
+        }
+        ComputeReport candidatesReport;
+        auto candidates = compute_workload(bounds, 1, Transform::Identity(), p.compute, candidatesReport);
+        for (size_t i = 0; i < pairs.size(); ++i) {
+            const auto &pair = pairs[i];
+            if (candidates[i * 3].z() == 0 || candidates[i * 3 + 1].z() == 0 ||
+                candidates[i * 3 + 2].z() == 0) {
+                result.clearance = std::min(result.clearance, pair.lower);
+                if (stationary)
+                    impl->staticBodyClearance = std::min(impl->staticBodyClearance, pair.lower);
+                continue;
+            }
+            auto moving = pair.moving, fixed = pair.fixed;
+            fcl::CollisionObjectd body(*moving->object);
+            body.setTransform(pair.pose);
+            body.computeAABB();
+            fcl::DistanceRequestd request(true, false, 0, 0, 1e-8, fcl::GST_LIBCCD);
+            fcl::DistanceResultd distance;
+            fcl::distance(&body, fixed->object.get(), request, distance);
+            double clearance = distance.min_distance - moving->error - fixed->error;
+            result.clearance = std::min(result.clearance, clearance);
+            if (stationary)
+                impl->staticBodyClearance = std::min(impl->staticBodyClearance, clearance);
+            if (fixed->solid && contains(*fixed->solid, body.getTransform() *
+                                                            moving->object->collisionGeometry()->aabb_center))
+                clearance = -1;
+            if (moving->solid &&
+                contains(*moving->solid, bed.inverse() * (fixed->object->getTransform() *
+                                                          fixed->object->collisionGeometry()->aabb_center)))
+                clearance = -1;
+            if (clearance < required - 1e-8) {
+                result.status = Status::Collision;
+                result.first = moving->name;
+                result.second = fixed->name;
+                result.reason =
+                    "Workpiece/finished material does not clear a fixed machine body or parked tool";
+                result.clearance = clearance;
+                result.contact = distance.nearest_points[0];
+                if (stationary)
+                    impl->staticBodyConflict = result;
+                return result;
+            }
+        }
+        if (stationary)
+            impl->checkedStaticBodies = impl->part.size();
+    }
     return result;
 }
 bool CollisionScene::check_interval(const JointState &a, const JointState &b, bool extruding, const Vec3 &pa,
@@ -497,7 +653,8 @@ bool CollisionScene::check_interval(const JointState &a, const JointState &b, bo
         }
         auto x = interpolate_motion(impl->project.machine, impl->project.active_toolhead(), a, b, left),
              y = interpolate_motion(impl->project.machine, impl->project.active_toolhead(), a, b, right);
-        double bound = movement_bound(impl->project.machine, impl->project.active_toolhead(), x, y, impl->radius);
+        double bound =
+            movement_bound(impl->project.machine, impl->project.active_toolhead(), x, y, impl->radius);
         if (impl->project.machine.layout == Layout::TiltingHead && impl->movingPairs)
             bound *= 2;
         double margin = impl->project.machine.clearance;
@@ -530,26 +687,40 @@ bool CollisionScene::check_interval(const JointState &a, const JointState &b, bo
 CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
                                 std::function<void(double)> progress) {
     CollisionReport r;
+    if (p.plateEnabled)
+        return validate_plate_motion(p, cancel, progress);
     r.fingerprint = p.fingerprint();
     r.status = Status::Clear;
-    if((p.machine.controller==Controller::GenericMarlin && p.machine.rotary_axes()) || (p.process.nonPlanar3Axis && p.machine.rotary_axes()) || (!p.machine.rotary_axes() && cartesian_motion_violation(p)>=0)) {
-        r.status=Status::Unresolved;r.events.push_back({Status::Unresolved,"Machine mode","Motion constraints","Standard XYZ output requires zero rotary motion, an upright nozzle and allowed non-planar slopes"});return r;
+    if ((p.machine.controller == Controller::GenericMarlin && p.machine.rotary_axes()) ||
+        (p.process.nonPlanar3Axis && p.machine.rotary_axes()) ||
+        (!p.machine.rotary_axes() && cartesian_motion_violation(p) >= 0)) {
+        r.status = Status::Unresolved;
+        r.events.push_back({Status::Unresolved, "Machine mode", "Motion constraints",
+                            "Standard XYZ output requires zero rotary motion, an upright nozzle and allowed "
+                            "non-planar slopes"});
+        return r;
     }
-    if(p.process.profileNormal) {
+    if (p.process.profileNormal) {
         try {
-            int move=profile_motion_violation(p);
-            if(move>=0) {
-                r.status=Status::Unresolved;
-                r.events.push_back({Status::Unresolved,"Nozzle axis","Profile plane","Nozzle orientation or TCP departs from the required profile plane",move,p.path[move].time});
+            int move = profile_motion_violation(p);
+            if (move >= 0) {
+                r.status = Status::Unresolved;
+                r.events.push_back({Status::Unresolved, "Nozzle axis", "Profile plane",
+                                    "Nozzle orientation or TCP departs from the required profile plane", move,
+                                    p.path[move].time});
                 return r;
             }
-        }catch(const std::exception &e) {
-            r.status=Status::Unresolved;r.events.push_back({Status::Unresolved,"Profile guide","Invalid guide",QString::fromUtf8(e.what())});return r;
+        } catch (const std::exception &e) {
+            r.status = Status::Unresolved;
+            r.events.push_back(
+                {Status::Unresolved, "Profile guide", "Invalid guide", QString::fromUtf8(e.what())});
+            return r;
         }
     }
-    if(!p.pathProcessFingerprint.isEmpty() && p.pathProcessFingerprint!=process_fingerprint(p.process)) {
-        r.status=Status::Unresolved;
-        r.events.push_back({Status::Unresolved,"Print process","Stale toolpaths","Process settings changed; slice again to generate matching motion"});
+    if (!p.pathProcessFingerprint.isEmpty() && p.pathProcessFingerprint != process_fingerprint(p.process)) {
+        r.status = Status::Unresolved;
+        r.events.push_back({Status::Unresolved, "Print process", "Stale toolpaths",
+                            "Process settings changed; slice again to generate matching motion"});
         return r;
     }
     for (auto &c : p.active_toolhead().components)
@@ -586,7 +757,8 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
         return r;
     }
     if (p.active_toolhead().axis.norm() < 1e-8 ||
-        (p.active_toolhead().mount.linear() * p.active_toolhead().axis.normalized() - Vec3::UnitZ()).norm() > 1e-6) {
+        (p.active_toolhead().mount.linear() * p.active_toolhead().axis.normalized() - Vec3::UnitZ()).norm() >
+            1e-6) {
         r.status = Status::Unresolved;
         r.events.push_back({Status::Unresolved, "Setup", "Nozzle frame",
                             "Align the zero-pose nozzle axis to +Z in the setup wizard"});
@@ -598,7 +770,8 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
         if (!s.position.allFinite() || !s.direction.allFinite() || s.direction.norm() < 1e-8 ||
             !std::isfinite(s.time) || !std::isfinite(s.deltaE) || s.time < lastTime ||
             (part_position(p.machine, s.joint) - s.position).norm() > p.machine.chordTolerance + 1e-5 ||
-            (part_direction(p.machine, p.active_toolhead(), s.joint) - s.direction.normalized()).norm() > 1e-5) {
+            (part_direction(p.machine, p.active_toolhead(), s.joint) - s.direction.normalized()).norm() >
+                1e-5) {
             r.status = Status::Unresolved;
             CollisionEvent e;
             e.status = Status::Unresolved;
@@ -646,7 +819,13 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
                 scene.check_interval(x, y, b.deltaE > 0, pa, pb, int(i), a.time + (b.time - a.time) * u,
                                      a.time + (b.time - a.time) * v, r, cancel);
             if (b.deltaE > 0)
-                scene.deposit(pa,pb,b.width,b.height,b.role,p.machine.rotary_axes()?part_direction(p.machine,p.active_toolhead(),interpolate_motion(p.machine,p.active_toolhead(),x,y,.5)):(surface_normal(a)*(1-(u+v)/2)+surface_normal(b)*((u+v)/2)).normalized());
+                scene.deposit(
+                    pa, pb, b.width, b.height, b.role,
+                    p.machine.rotary_axes()
+                        ? part_direction(p.machine, p.active_toolhead(),
+                                         interpolate_motion(p.machine, p.active_toolhead(), x, y, .5))
+                        : (surface_normal(a) * (1 - (u + v) / 2) + surface_normal(b) * ((u + v) / 2))
+                              .normalized());
             if (r.events.size() > 200 || r.status == Status::Cancelled)
                 break;
         }
@@ -697,7 +876,84 @@ class SeededConnect : public ompl::geometric::RRTConnect {
         rng_.setLocalSeed(42);
     }
 };
+std::vector<JointState> repair_travel(CollisionScene &scene, const MachineProfile &machine,
+                                      const ToolheadAssembly &assembly, const JointState &first,
+                                      const JointState &last, std::atomic_bool *cancel) {
+    std::lock_guard<std::mutex> lock(plannerMutex);
+    namespace ob = ompl::base;
+    namespace og = ompl::geometric;
+    if (scene.check_pose(first, false, part_position(machine, first)).status != Status::Clear ||
+        scene.check_pose(last, false, part_position(machine, last)).status != Status::Clear)
+        return {};
+    int dimensions = machine.rotary_axes() ? 5 : 3;
+    auto space = std::make_shared<ob::RealVectorStateSpace>(dimensions);
+    ob::RealVectorBounds bounds(dimensions);
+    for (int k = 0; k < 3; ++k) {
+        bounds.setLow(k, machine.minXYZ[k]);
+        bounds.setHigh(k, machine.maxXYZ[k]);
+    }
+    if (dimensions == 5) {
+        bounds.setLow(3, machine.minA);
+        bounds.setHigh(3, machine.maxA);
+        bounds.setLow(4, machine.minB);
+        bounds.setHigh(4, machine.maxB);
+    }
+    space->setBounds(bounds);
+    space->setStateSamplerAllocator(
+        [](const ob::StateSpace *s) { return std::make_shared<SeededSampler>(s); });
+    og::SimpleSetup setup(space);
+    auto pose = [&](const ob::State *state) {
+        auto values = state->as<ob::RealVectorStateSpace::StateType>()->values;
+        JointState axes;
+        axes.xyz = Vec3(values[0], values[1], values[2]);
+        if (dimensions == 5) {
+            axes.a = values[3];
+            axes.b = values[4];
+        }
+        return pose_from_axes(machine, assembly, axes);
+    };
+    setup.setStateValidityChecker([&](const ob::State *state) {
+        auto q = pose(state);
+        return in_limits(machine, assembly, q) &&
+               scene.check_pose(q, false, part_position(machine, q)).status == Status::Clear;
+    });
+    setup.getSpaceInformation()->setStateValidityCheckingResolution(.0005);
+    ob::ScopedState<> start(space), goal(space);
+    auto a = controller_axes(machine, assembly, first), b = controller_axes(machine, assembly, last);
+    for (int k = 0; k < 3; ++k) {
+        start[k] = a.xyz[k];
+        goal[k] = b.xyz[k];
+    }
+    if (dimensions == 5) {
+        start[3] = a.a;
+        start[4] = a.b;
+        goal[3] = b.a;
+        goal[4] = b.b;
+    }
+    setup.setStartAndGoalStates(start, goal);
+    setup.setPlanner(std::make_shared<SeededConnect>(setup.getSpaceInformation()));
+    int budget = 0;
+    if (setup.solve(ob::PlannerTerminationCondition([&] {
+            return ++budget >= 5000 || (cancel && cancel->load());
+        })) != ob::PlannerStatus::EXACT_SOLUTION)
+        return {};
+    auto path = setup.getSolutionPath();
+    std::vector<JointState> result;
+    auto previous = first;
+    for (size_t i = 1; i < path.getStateCount(); ++i) {
+        auto next = pose(path.getState(i));
+        CollisionReport report;
+        report.status = Status::Clear;
+        if (!scene.check_interval(previous, next, false, Vec3::Zero(), Vec3::Zero(), 0, 0, 1, report, cancel))
+            return {};
+        result.push_back(next);
+        previous = next;
+    }
+    return result;
+}
 bool repair_motion(Project &p, std::atomic_bool *cancel) {
+    if (p.plateEnabled)
+        return repair_plate_motion(p, cancel);
     std::lock_guard<std::mutex> lock(plannerMutex);
     CollisionScene scene(p);
     bool changed = false;
@@ -725,12 +981,15 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
             Vec3 x = original.unitOrthogonal(), y = original.cross(x);
             for (int cone = 0; cone <= 2 && !good && trials < 256; ++cone)
                 for (int angle = 0; angle < 12 && !good && trials < 256; ++angle) {
-                    double tilt = p.process.profileNormal || !p.machine.rotary_axes()?0:cone * p.process.directionCone / 2, az = angle * 2 * pi / 12;
+                    double tilt = p.process.profileNormal || !p.machine.rotary_axes()
+                                      ? 0
+                                      : cone * p.process.directionCone / 2,
+                           az = angle * 2 * pi / 12;
                     Vec3 n =
                         (original * std::cos(tilt) + (x * std::cos(az) + y * std::sin(az)) * std::sin(tilt))
                             .normalized();
-                    for (auto q :
-                         inverse_kinematics(p.machine, target.position, n, previous.joint, p.active_toolhead())) {
+                    for (auto q : inverse_kinematics(p.machine, target.position, n, previous.joint,
+                                                     p.active_toolhead())) {
                         if (++trials > 256)
                             break;
                         CollisionReport test;
@@ -750,14 +1009,19 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
         if (!good && target.deltaE <= 0) {
             namespace ob = ompl::base;
             namespace og = ompl::geometric;
-            int dimensions=p.machine.rotary_axes()?5:3;
+            int dimensions = p.machine.rotary_axes() ? 5 : 3;
             auto space = std::make_shared<ob::RealVectorStateSpace>(dimensions);
             ob::RealVectorBounds bounds(dimensions);
             for (int k = 0; k < 3; ++k) {
                 bounds.setLow(k, p.machine.minXYZ[k]);
                 bounds.setHigh(k, p.machine.maxXYZ[k]);
             }
-            if(p.machine.rotary_axes()){bounds.setLow(3,p.machine.minA);bounds.setHigh(3,p.machine.maxA);bounds.setLow(4,p.machine.minB);bounds.setHigh(4,p.machine.maxB);}
+            if (p.machine.rotary_axes()) {
+                bounds.setLow(3, p.machine.minA);
+                bounds.setHigh(3, p.machine.maxA);
+                bounds.setLow(4, p.machine.minB);
+                bounds.setHigh(4, p.machine.maxB);
+            }
             space->setBounds(bounds);
             space->setStateSamplerAllocator(
                 [](const ob::StateSpace *s) { return std::make_shared<SeededSampler>(s); });
@@ -766,8 +1030,8 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
                 auto s = state->as<ob::RealVectorStateSpace::StateType>();
                 JointState q;
                 q.xyz = Vec3(s->values[0], s->values[1], s->values[2]);
-                q.a = p.machine.rotary_axes()?s->values[3]:0;
-                q.b = p.machine.rotary_axes()?s->values[4]:0;
+                q.a = p.machine.rotary_axes() ? s->values[3] : 0;
+                q.b = p.machine.rotary_axes() ? s->values[4] : 0;
                 return pose_from_axes(p.machine, p.active_toolhead(), q);
             };
             setup.setStateValidityChecker([&](const ob::State *state) {
@@ -780,7 +1044,12 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
                 start[k] = controller_axes(p.machine, p.active_toolhead(), previous.joint).xyz[k];
                 goal[k] = controller_axes(p.machine, p.active_toolhead(), target.joint).xyz[k];
             }
-            if(p.machine.rotary_axes()){start[3]=previous.joint.a;start[4]=previous.joint.b;goal[3]=target.joint.a;goal[4]=target.joint.b;}
+            if (p.machine.rotary_axes()) {
+                start[3] = previous.joint.a;
+                start[4] = previous.joint.b;
+                goal[3] = target.joint.a;
+                goal[4] = target.joint.b;
+            }
             setup.setStartAndGoalStates(start, goal);
             setup.setPlanner(std::make_shared<SeededConnect>(setup.getSpaceInformation()));
             int budget = 0;
@@ -819,7 +1088,7 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
         }
         if (target.deltaE > 0)
             scene.deposit(previous.position, target.position, target.width, target.height, target.role,
-                          (surface_normal(previous)+surface_normal(target)).normalized());
+                          (surface_normal(previous) + surface_normal(target)).normalized());
     }
     if (changed)
         refine_joint_motion(p);
@@ -839,7 +1108,8 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
     }
     p.report = validate_motion(p, cancel);
     // One bounded retry changes the orientation of the affected curve as a region.
-    if (p.machine.rotary_axes() && !p.process.profileNormal && !p.report.exportable() && !p.report.events.empty() && !(cancel && cancel->load())) {
+    if (p.machine.rotary_axes() && !p.process.profileNormal && !p.report.exportable() &&
+        !p.report.events.empty() && !(cancel && cancel->load())) {
         auto event = p.report.events.front();
         if (event.move > 0 && event.move < int(p.path.size()) && p.path[event.move].deltaE > 0) {
             Project candidate = p;

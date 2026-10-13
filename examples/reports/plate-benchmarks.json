@@ -1,0 +1,20 @@
+[
+  {
+    "fixture": "plate-sequential",
+    "exitCode": 0,
+    "endToEndSeconds": 33.152,
+    "timeBudgetSeconds": 300
+  },
+  {
+    "fixture": "plate-shared-nozzle",
+    "exitCode": 0,
+    "endToEndSeconds": 35.742,
+    "timeBudgetSeconds": 300
+  },
+  {
+    "fixture": "plate-two-tools",
+    "exitCode": 0,
+    "endToEndSeconds": 171.51,
+    "timeBudgetSeconds": 300
+  }
+]

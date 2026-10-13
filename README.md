@@ -1,10 +1,14 @@
-# FiveAxisLab 0.3.0
+# FiveAxisLab 0.4.0
 
 Independent C++17 / Qt 6 / OpenGL research application for five-axis FFF. Windows x64 portable build, shared headless core, AGPL-3.0-or-later. This is an initial research implementation, with remaining qualification work recorded in [docs/VALIDATION.md](docs/VALIDATION.md).
 
 ## Run
 
-Extract the locally packaged `dist/FiveAxisLab-0.3.0-win64.zip` and run `FiveAxisLab.exe`. No SDK or Python is needed to run the packaged desktop app. The portable folder also contains `fiveaxis_cli.exe`, example projects, CAD fixtures, controller integration, dependency notices and validation reports. Binary packages and the SDK are excluded from Git; a fresh clone can produce them using the build instructions below.
+Extract the locally packaged `dist/FiveAxisLab-0.4.0-win64.zip` and run `FiveAxisLab.exe`. No SDK or Python is needed to run the packaged desktop app. The portable folder also contains `fiveaxis_cli.exe`, example projects, CAD fixtures, optional GPU backends, controller integration, dependency notices and validation reports. Binary packages and the SDK are excluded from Git; a fresh clone can produce them using the build instructions below.
+
+Version 0.4 adds **Plate / tools**: schema-2 objects, materials, per-tool STEP/dummy geometry, installed nozzles, surface painting and volume/role assignments, shared-nozzle feeder recipes, detachable tool changes, purge structures, complete-object sequencing and whole-plate collision checks. Simulation restores active/parked tools and material history while scrubbing. CPU work uses a bounded pool; optional CUDA/Vulkan plugins evaluate verified field/candidate/preview batches. Auto retains CPU where measured GPU cost is higher. [Plate controls](docs/PLATE_JOBS.md), [tool changes and replay](docs/TOOL_CHANGES.md), [compute execution](docs/COMPUTE.md), [release evidence](docs/RELEASE_0_4.md).
+
+![Schema-2 plate simulation](examples/reports/plate-preview.png)
 
 ![Spiral profile-normal five-axis preview](examples/reports/spiral-head-preview.png)
 
@@ -14,7 +18,7 @@ Version 0.3.2 adds **Nozzle perpendicular to profile**, independent of FEM. **Si
 
 Version 0.3.1 adds **Preview → Axis behavior**. Follow the recorded toolpath angles, drag **Manual tilt / roll** controls, or select **Animated tilt / roll**. Rotary-bed A/C and tilting-head A/B use calibrated pivots, link attachments and TCP compensation; rings mark the actual axis locations. Manual/animated poses pause the deposited prefix, preserve the project and disable export. **Simulation → Open rotary-bed / tilting-head axis demonstration** opens a synthetic, non-printing sweep with coordinated XYZ and rotary motion. See [axis preview controls](docs/AXIS_PREVIEW.md).
 
-Version 0.3 adds the Orca-style **Prepare / Preview** workspace, an inline **Quality / Strength / Speed / Support / Other** sidebar, settings search, a screenshot-reference preset, filament/time/cost estimates, layer-range sliders and bead/path visibility by line type. New settings generate real surface patterns, shell thicknesses, alternating walls, compensation, speed limits, skirts and brims. STEP import has live linear/angular tessellation controls and a component/facet preview. [Implemented and unavailable controls](docs/WORKSPACE.md) lists the exact boundary; scarf, tree support, ironing, multi-material and full Orca engine integration remain outstanding.
+Version 0.3 adds the Orca-style **Prepare / Preview** workspace, an inline **Quality / Strength / Speed / Support / Other** sidebar, settings search, a screenshot-reference preset, filament/time/cost estimates, layer-range sliders and bead/path visibility by line type. New settings generate real surface patterns, shell thicknesses, alternating walls, compensation, speed limits, skirts and brims. STEP import has live linear/angular tessellation controls and a component/facet preview. [Implemented and unavailable controls](docs/WORKSPACE.md) lists the exact boundary; scarf, tree support, ironing and full Orca engine integration remain outstanding.
 
 Version 0.2 adds **Toolpaths → Full job / Up to nozzle / Current layer**, travel and deposited-material visibility controls, and role colors for outer walls, inner walls, infill, solid fill and supports. **Generate with dummy toolhead** uses synthetic collision geometry while retaining the imported STEP assembly. **Process settings · Orca options** exposes widths, wall order, shell layers, infill patterns, seam placement, speeds and Z hop. Select **Normal / Reduced / No supports**; unsupported deposition remains checked. [Supported controls and Orca preset import](docs/PROCESS_SETTINGS.md).
 
@@ -48,7 +52,7 @@ The workspace-local SDK is populated from checksum-locked official MSYS2 package
 python tools/bootstrap.py
 python tools/fetch_sources.py
 ./tools/build.ps1 -Test
-python -m unittest discover -s tests -p test_klipper_flow.py
+python -m unittest discover -s tests -p 'test_klipper*.py'
 python tools/package.py
 ```
 
@@ -67,6 +71,9 @@ Native Klipper batch testing uses WSL/Linux with GCC, Make, Python and the pinne
 ./fiveaxis_cli.exe --slice part.stl --dummy-toolhead --orca-process process.json --supports reduced --output preview.5axis --plan-only
 ./fiveaxis_cli.exe --axis-demo bed --output axes-bed.5axis
 ./fiveaxis_cli.exe --axis-demo head --output axes-head.5axis
+./fiveaxis_cli.exe --plate-demo --complete-objects --output plate.5axis
+./fiveaxis_cli.exe --validate plate.5axis --reslice --threads 8 --compute cpu --report plate.json --replay
+./fiveaxis_cli.exe --compute-benchmark compute.json
 ```
 
 Exit 0 means the selected motion passes configured geometry checks; 2 means collision / unresolved; 1 means input or operation failure. Export is blocked independently when deposition planning is incomplete. Source-CAD hashes, collision tolerances, settings, FEM, placements, machine bodies, paths and reports round-trip in a `.5axis` ZIP project.

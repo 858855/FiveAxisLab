@@ -10,7 +10,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SDK = ROOT / 'sdk/ucrt64'
-OUT = ROOT / 'dist/FiveAxisLab-0.3.3-win64'
+OUT = ROOT / 'dist/FiveAxisLab-0.4.0-win64'
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
@@ -20,6 +20,9 @@ def main():
     for filename in ['FiveAxisLab.exe', 'fiveaxis_cli.exe']:
         target=OUT/filename
         shutil.copy2(ROOT/'build/bin'/filename,target);queue.append(target)
+    for source in (ROOT/'build/bin/compute').glob('*.dll'):
+        target=OUT/'compute'/source.name;target.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copy2(source,target);queue.append(target)
     pluginRoot=SDK/'share/qt6/plugins'
     for group in ['platforms','imageformats','styles']:
         for source in (pluginRoot/group).glob('*.dll'):
@@ -60,7 +63,7 @@ def main():
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as z:
         for p in OUT.rglob('*'):
             if p.is_file() and 'cache' not in p.parts:z.write(p, str(p.relative_to(OUT.parent)))
-    sourceArchive=ROOT/'dist/FiveAxisLab-0.3.3-source.zip'
+    sourceArchive=ROOT/'dist/FiveAxisLab-0.4.0-source.zip'
     with zipfile.ZipFile(sourceArchive,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as z:
         for directory in ['src','tests','tools','controllers','docs','examples','vendor']:
             for p in (ROOT/directory).rglob('*'):

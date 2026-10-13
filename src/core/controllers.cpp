@@ -1,8 +1,9 @@
 #include "controllers.h"
 #include "collision.h"
-#include "project.h"
-#include "profile.h"
 #include "nonplanar.h"
+#include "plate.h"
+#include "profile.h"
+#include "project.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QRegularExpression>
@@ -22,8 +23,14 @@ double feed_metric(const MachineProfile &m, const JointState &a, const JointStat
     return std::max(std::hypot(da, db), std::abs(deltaE));
 }
 QString export_gcode(const Project &p) {
-    if((p.machine.controller==Controller::GenericMarlin && p.machine.rotary_axes()) || (p.process.nonPlanar3Axis && p.machine.rotary_axes()) || (!p.machine.rotary_axes() && cartesian_motion_violation(p)>=0))throw std::runtime_error("Export blocked: incompatible XYZ controller or motion constraints");
-    if(p.process.profileNormal && profile_motion_violation(p)>=0)throw std::runtime_error("Export blocked: nozzle is not perpendicular to the profile");
+    if (p.plateEnabled)
+        return export_plate_gcode(p);
+    if ((p.machine.controller == Controller::GenericMarlin && p.machine.rotary_axes()) ||
+        (p.process.nonPlanar3Axis && p.machine.rotary_axes()) ||
+        (!p.machine.rotary_axes() && cartesian_motion_violation(p) >= 0))
+        throw std::runtime_error("Export blocked: incompatible XYZ controller or motion constraints");
+    if (p.process.profileNormal && profile_motion_violation(p) >= 0)
+        throw std::runtime_error("Export blocked: nozzle is not perpendicular to the profile");
     if (!p.report.exportable() || p.report.fingerprint != p.fingerprint())
         throw std::runtime_error("Export blocked: validate the current geometry, machine, and motion first");
     if (!p.depositionValid)
@@ -36,7 +43,9 @@ QString export_gcode(const Project &p) {
            << "\n; Start in the calibrated initial pose; homing is machine-specific.\n; Geometry "
               "verification does not establish physical print safety.\n";
     auto setup = project_json(p);
-    stream << "; Toolhead model: " << (p.useDummyToolhead ? "DUMMY - synthetic geometry only" : "imported / configured geometry") << "\n";
+    stream << "; Toolhead model: "
+           << (p.useDummyToolhead ? "DUMMY - synthetic geometry only" : "imported / configured geometry")
+           << "\n";
     auto initialAxes = controller_axes(p.machine, p.active_toolhead(), p.path.front().joint);
     QJsonObject metadata{
         {"machine", setup["machine"]},
@@ -46,7 +55,7 @@ QString export_gcode(const Project &p) {
            << "\nG21\nG90\nM83\n";
     if (p.machine.controller == Controller::Duet)
         stream << "M572 D0 S0\n";
-    else if(p.machine.controller==Controller::Klipper && p.machine.rotary_axes()) {
+    else if (p.machine.controller == Controller::Klipper && p.machine.rotary_axes()) {
         stream
             << "SET_PRESSURE_ADVANCE ADVANCE=0\nMANUAL_STEPPER STEPPER=rotary_a GCODE_AXIS=\nMANUAL_STEPPER "
                "STEPPER=rotary_b GCODE_AXIS=\nMANUAL_STEPPER STEPPER=rotary_a GCODE_AXIS=A LIMIT_VELOCITY="
@@ -69,7 +78,8 @@ QString export_gcode(const Project &p) {
             stream << "\n";
         }
     }
-    if(p.machine.controller==Controller::Klipper && !p.machine.rotary_axes())stream<<"SET_PRESSURE_ADVANCE ADVANCE=0\n";
+    if (p.machine.controller == Controller::Klipper && !p.machine.rotary_axes())
+        stream << "SET_PRESSURE_ADVANCE ADVANCE=0\n";
     for (size_t i = 1; i < p.path.size(); ++i) {
         const auto &a = p.path[i - 1];
         const auto &b = p.path[i];
@@ -80,7 +90,8 @@ QString export_gcode(const Project &p) {
             continue;
         if (duration <= 0)
             throw std::runtime_error("Invalid movement duration");
-        if (p.machine.controller == Controller::Klipper && (!p.machine.klipperExtension || !p.machine.rotary_axes()) && b.deltaE > 0) {
+        if (p.machine.controller == Controller::Klipper &&
+            (!p.machine.klipperExtension || !p.machine.rotary_axes()) && b.deltaE > 0) {
             double xyz = (axesB.xyz - axesA.xyz).norm();
             if (xyz > 1e-9 && b.deltaE / xyz > p.machine.stockExtrusionRatio)
                 throw std::runtime_error("Stock Klipper extrusion ratio exceeded: enable the rotary-aware "
@@ -90,10 +101,13 @@ QString export_gcode(const Project &p) {
         }
         stream << ";MOVE " << i << " ROLE " << int(b.role) << " LAYER " << b.layer << " WIDTH " << b.width
                << " HEIGHT " << b.height;
-        if(b.surfaceNormal)stream<<" NX "<<b.surfaceNormal->x()<<" NY "<<b.surfaceNormal->y()<<" NZ "<<b.surfaceNormal->z();
-        stream<<"\nG1 X"<<axesB.xyz.x()<<" Y"<<axesB.xyz.y()<<" Z"<<axesB.xyz.z();
-        if(p.machine.rotary_axes())stream<<" A"<<b.joint.a*180/pi<<" "<<p.machine.axis2()<<b.joint.b*180/pi;
-        stream<<" E"<<b.deltaE<<" F"<<metric/duration*60<<"\n";
+        if (b.surfaceNormal)
+            stream << " NX " << b.surfaceNormal->x() << " NY " << b.surfaceNormal->y() << " NZ "
+                   << b.surfaceNormal->z();
+        stream << "\nG1 X" << axesB.xyz.x() << " Y" << axesB.xyz.y() << " Z" << axesB.xyz.z();
+        if (p.machine.rotary_axes())
+            stream << " A" << b.joint.a * 180 / pi << " " << p.machine.axis2() << b.joint.b * 180 / pi;
+        stream << " E" << b.deltaE << " F" << metric / duration * 60 << "\n";
     }
     stream << "M400\n";
     if (p.machine.controller == Controller::Klipper && p.machine.klipperExtension && p.machine.rotary_axes())
@@ -101,6 +115,8 @@ QString export_gcode(const Project &p) {
     return out;
 }
 Project replay_gcode(const Project &context, const QString &gcode) {
+    if (context.plateEnabled)
+        return replay_plate_gcode(context, gcode);
     Project p = context;
     p.path.clear();
     p.report = CollisionReport{};
@@ -144,7 +160,9 @@ Project replay_gcode(const Project &context, const QString &gcode) {
                 layer = a[5].toInt();
                 width = a[7].toDouble();
                 height = a[9].toDouble();
-                surfaceNormal.reset();if(a.size()>=16 && a[10]=="NX" && a[12]=="NY" && a[14]=="NZ")surfaceNormal=Vec3(a[11].toDouble(),a[13].toDouble(),a[15].toDouble());
+                surfaceNormal.reset();
+                if (a.size() >= 16 && a[10] == "NX" && a[12] == "NY" && a[14] == "NZ")
+                    surfaceNormal = Vec3(a[11].toDouble(), a[13].toDouble(), a[15].toDouble());
             }
             continue;
         }
@@ -152,7 +170,9 @@ Project replay_gcode(const Project &context, const QString &gcode) {
             continue;
         line = line.section(';', 0, 0).trimmed();
         QString command = line.section(' ', 0, 0).toUpper();
-        if(!p.machine.rotary_axes() && (command=="MANUAL_STEPPER" || command=="FIVEAXIS_ENABLE" || command=="FIVEAXIS_DISABLE"))throw std::runtime_error("Rotary command in an XYZ-only replay");
+        if (!p.machine.rotary_axes() &&
+            (command == "MANUAL_STEPPER" || command == "FIVEAXIS_ENABLE" || command == "FIVEAXIS_DISABLE"))
+            throw std::runtime_error("Rotary command in an XYZ-only replay");
         if (command == "G90") {
             absolute = true;
             continue;
@@ -175,7 +195,8 @@ Project replay_gcode(const Project &context, const QString &gcode) {
         if (command != "G1" && command != "G0")
             throw std::runtime_error("Replay cannot verify unsupported command: " + command.toStdString());
         auto v = parse(line);
-        if(!p.machine.rotary_axes() && (v.count("A") || v.count("B") || v.count("C")))throw std::runtime_error("Rotary axis word in an XYZ-only replay");
+        if (!p.machine.rotary_axes() && (v.count("A") || v.count("B") || v.count("C")))
+            throw std::runtime_error("Rotary axis word in an XYZ-only replay");
         JointState next = state;
         for (int j = 0; j < 3; ++j) {
             QString key = QString("XYZ")[j];
@@ -199,7 +220,7 @@ Project replay_gcode(const Project &context, const QString &gcode) {
         s.joint = pose_from_axes(p.machine, p.active_toolhead(), next);
         s.position = part_position(p.machine, s.joint);
         s.direction = part_direction(p.machine, p.active_toolhead(), s.joint);
-        s.surfaceNormal=surfaceNormal;
+        s.surfaceNormal = surfaceNormal;
         s.deltaE = e;
         s.role = e > 0 ? role : e < 0 ? Role::Retract : Role::Travel;
         s.layer = layer;
@@ -213,13 +234,59 @@ Project replay_gcode(const Project &context, const QString &gcode) {
     p.depositionValid = context.depositionValid;
     return p;
 }
-QString controller_template(const MachineProfile &m) {
-    if(!m.rotary_axes()) {
-        if(m.controller==Controller::Klipper)return "# Standard XYZ printer: use its calibrated printer.cfg.\n# Existing [stepper_x], [stepper_y], [stepper_z] and [extruder] remain in use.\n# No rotary steppers or fiveaxis_flow extension is required.\n# Keep pressure_advance: 0 until this non-planar profile is qualified.\n";
-        if(m.controller==Controller::Duet)return "; Standard XYZ printer: preserve its calibrated config.g and homing macros.\n; Cartesian mapping example only:\nM584 X0 Y1 Z2 E3\nM572 D0 S0\n";
-        return "; Generic / Marlin XYZ output: G21, G90, M83 and coordinated G1 XYZ/E.\n; Use the printer's calibrated settings, homing, heating and startup procedure.\n; No rotary axes are configured.\n";
+QString controller_template(const Project &p) {
+    auto text = controller_template(p.machine);
+    if (!p.plateEnabled)
+        return text;
+    bool klipper = p.machine.controller == Controller::Klipper,
+         duet = p.machine.controller == Controller::Duet;
+    QString comment = klipper ? "# " : "; ";
+    text += comment + "Plate tool definitions: firmware XYZ tool offsets are zero; planned carriage paths "
+                      "apply TCP calibration.\n";
+    for (const auto &t : p.tools) {
+        text += comment +
+                QString("%1: installed nozzle %2 mm, extruder %3, heater %4, TCP in project CAD frame.\n")
+                    .arg(t.id)
+                    .arg(t.nozzle.diameter)
+                    .arg(t.extruder, t.heater);
+        if (duet)
+            text += QString("M563 P%1 D%2 H%3\nG10 P%1 X0 Y0 Z0\nM572 D%2 S0\n")
+                        .arg(t.controllerTool)
+                        .arg(t.duetDrive)
+                        .arg(t.duetHeater);
+        else if (klipper)
+            text += comment + QString("Configure [%1] with nozzle_diameter: %2 and pressure_advance: 0; "
+                                      "calibrate its pins/heater.\n")
+                                  .arg(t.extruder)
+                                  .arg(t.nozzle.diameter);
+        else
+            text += QString("M218 T%1 X0 Y0 Z0\n").arg(t.controllerTool);
     }
-    if(m.controller==Controller::GenericMarlin)throw std::runtime_error("Generic / Marlin output is available only for standard XYZ machines");
+    if (klipper && std::any_of(p.tools.begin(), p.tools.end(),
+                               [](const ToolDefinition &t) { return t.detachable || t.routes.size() > 1; }))
+        text +=
+            "# Install fiveaxis_tools.py alongside fiveaxis_flow.py. Configure real filament_switch_sensor "
+            "latch sensors.\n[fiveaxis_tools]\n# selectors: {\"0\":{\"pin\":\"selector\",\"value\":0}}\n";
+    text += comment + "Dock waypoints, I/O pins, sensor checks and purge volumes require the calibrated "
+                      "profile. Arbitrary motion macros are not replay-supported.\n";
+    return text;
+}
+QString controller_template(const MachineProfile &m) {
+    if (!m.rotary_axes()) {
+        if (m.controller == Controller::Klipper)
+            return "# Standard XYZ printer: use its calibrated printer.cfg.\n# Existing [stepper_x], "
+                   "[stepper_y], [stepper_z] and [extruder] remain in use.\n# No rotary steppers or "
+                   "fiveaxis_flow extension is required.\n# Keep pressure_advance: 0 until this non-planar "
+                   "profile is qualified.\n";
+        if (m.controller == Controller::Duet)
+            return "; Standard XYZ printer: preserve its calibrated config.g and homing macros.\n; Cartesian "
+                   "mapping example only:\nM584 X0 Y1 Z2 E3\nM572 D0 S0\n";
+        return "; Generic / Marlin XYZ output: G21, G90, M83 and coordinated G1 XYZ/E.\n; Use the printer's "
+               "calibrated settings, homing, heating and startup procedure.\n; No rotary axes are "
+               "configured.\n";
+    }
+    if (m.controller == Controller::GenericMarlin)
+        throw std::runtime_error("Generic / Marlin output is available only for standard XYZ machines");
     if (m.controller == Controller::Duet)
         return QString("; Reference only: calibrate drivers, endstops, limits and steps/degree for your "
                        "machine.\nM584 X0 Y1 Z2 E3\nM584 A4 %1%2 R1 S1\nM92 A<steps_per_degree> "
