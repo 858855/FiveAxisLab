@@ -180,9 +180,13 @@ struct NozzleProfile {
     QString name = "0.4 mm", componentId, geometryHash;
     double diameter = .4, minHeight = .05, maxHeight = .3, minWidth = .32, maxWidth = .8;
     double maxFlow = 10, protrusion = 0;
-    bool calibrated = false, dummyNozzle = false;
+    bool calibrated = false, dummyNozzle = false, autoBeadLimits = true;
     ToolheadAssembly separateNozzle;
     Transform nozzleMount = Transform::Identity();
+    void reset_bead_limits() {
+        minHeight = minWidth = diameter * .5;
+        maxHeight = maxWidth = diameter * 2;
+    }
 };
 struct MaterialProfile {
     QString id, name = "PLA", color = "#e69932";

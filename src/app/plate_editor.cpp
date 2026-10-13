@@ -329,8 +329,19 @@ bool edit_plate(Project &project, QWidget *parent) {
     auto dummy = new QCheckBox("Use dimensioned dummy toolhead");
     auto detachable = new QCheckBox("Detachable toolhead");
     auto calibrated = new QCheckBox("Installed nozzle and CAD/TCP calibration confirmed");
-    auto diameter = number(.4, .05, 5), minHeight = number(.05, .001, 5), maxHeight = number(.3, .001, 5),
+    auto automaticLimits = new QCheckBox("Auto-fill bead limits when nozzle diameter changes");
+    automaticLimits->setObjectName("autoNozzleBeadLimits");
+    automaticLimits->setToolTip(
+        "Minimum height and width = half the nozzle diameter; maximum = twice the diameter. "
+        "All limits remain editable. Uncheck to keep custom limits when changing diameter.");
+    auto diameter = number(.4, .05, 5), minHeight = number(.05, .001, 10), maxHeight = number(.3, .001, 10),
          minWidth = number(.32, .01, 10), maxWidth = number(.8, .01, 10), maxFlow = number(10, .01, 500);
+    diameter->setObjectName("toolNozzleDiameter");
+    minHeight->setObjectName("toolMinBeadHeight");
+    maxHeight->setObjectName("toolMaxBeadHeight");
+    minWidth->setObjectName("toolMinBeadWidth");
+    maxWidth->setObjectName("toolMaxBeadWidth");
+    calibrated->setObjectName("toolNozzleCalibrated");
     auto tcp = new QLineEdit, axis = new QLineEdit, mount = new QLineEdit, dock = new QLineEdit;
     form->addRow("Tool name", toolName);
     form->addRow("Controller tool number", toolNumber);
@@ -341,6 +352,7 @@ bool edit_plate(Project &project, QWidget *parent) {
     form->addRow(dummy);
     form->addRow(detachable);
     form->addRow("Installed nozzle diameter · mm", diameter);
+    form->addRow(automaticLimits);
     form->addRow("Minimum local bead height", minHeight);
     form->addRow("Maximum local bead height", maxHeight);
     form->addRow("Minimum bead width", minWidth);
@@ -388,7 +400,7 @@ bool edit_plate(Project &project, QWidget *parent) {
         if (index < 0 || index >= int(copy.tools.size()))
             return;
         selected = index;
-        QSignalBlocker diameterGuard(diameter), dummyGuard(dummy);
+        QSignalBlocker diameterGuard(diameter), dummyGuard(dummy), automaticLimitsGuard(automaticLimits);
         auto &t = copy.tools[index];
         auto a = t.geometry();
         toolName->setText(t.name);
@@ -401,6 +413,7 @@ bool edit_plate(Project &project, QWidget *parent) {
         detachable->setChecked(t.detachable);
         calibrated->setChecked(t.nozzle.calibrated);
         diameter->setValue(t.nozzle.diameter);
+        automaticLimits->setChecked(t.nozzle.autoBeadLimits);
         minHeight->setValue(t.nozzle.minHeight);
         maxHeight->setValue(t.nozzle.maxHeight);
         minWidth->setValue(t.nozzle.minWidth);
@@ -469,6 +482,7 @@ bool edit_plate(Project &project, QWidget *parent) {
         t.nozzle.maxHeight = maxHeight->value();
         t.nozzle.minWidth = minWidth->value();
         t.nozzle.maxWidth = maxWidth->value();
+        t.nozzle.autoBeadLimits = automaticLimits->isChecked();
         t.nozzle.maxFlow = maxFlow->value();
         t.nozzle.calibrated = calibrated->isChecked();
         if (t.useDummy && (changed || t.dummy.components.empty()))
@@ -522,8 +536,24 @@ bool edit_plate(Project &project, QWidget *parent) {
         read_plate(parsed, json);
         copy.tools = parsed.tools;
     };
-    QObject::connect(diameter, qOverload<double>(&QDoubleSpinBox::valueChanged), &dialog,
-                     [&] { calibrated->setChecked(false); });
+    auto fillLimits = [&] {
+        NozzleProfile defaults;
+        defaults.diameter = diameter->value();
+        defaults.reset_bead_limits();
+        minHeight->setValue(defaults.minHeight);
+        maxHeight->setValue(defaults.maxHeight);
+        minWidth->setValue(defaults.minWidth);
+        maxWidth->setValue(defaults.maxWidth);
+    };
+    QObject::connect(diameter, qOverload<double>(&QDoubleSpinBox::valueChanged), &dialog, [&] {
+        calibrated->setChecked(false);
+        if (automaticLimits->isChecked())
+            fillLimits();
+    });
+    QObject::connect(automaticLimits, &QCheckBox::toggled, &dialog, [&](bool enabled) {
+        if (enabled)
+            fillLimits();
+    });
     QObject::connect(dummy, &QCheckBox::toggled, &dialog, [&](bool enabled) {
         if (selected < 0)
             return;
@@ -581,6 +611,7 @@ bool edit_plate(Project &project, QWidget *parent) {
             t.detachable = true;
             t.extruder = t.heater = "extruder" + QString::number(copy.tools.size());
             t.dummy = make_dummy_toolhead(.4);
+            t.nozzle.reset_bead_limits();
             t.routes.push_back({copy.materials.front().id, "0", {}, true});
             copy.tools.push_back(t);
             refreshTools();

@@ -13,6 +13,9 @@
 #include <QAction>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QJsonArray>
+#include <QListWidget>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QSurfaceFormat>
@@ -26,6 +29,144 @@ using namespace fiveaxis;
 class DesktopTests : public QObject {
     Q_OBJECT
   private Q_SLOTS:
+    void nozzle_limits_auto_fill_and_override() {
+        auto p = plate_demo();
+        p.tools[0].detachable = true;
+        p.tools[0].change.calibrated = true;
+        RecipeStep confirmation;
+        confirmation.kind = EventKind::Confirm;
+        confirmation.argument = "M226 P0 S1";
+        p.tools[0].change.pickup = {confirmation};
+        confirmation.argument = "M226 P0 S0";
+        p.tools[0].change.release = {confirmation};
+        auto second = p.tools.front();
+        second.id = "tool-2";
+        second.controllerTool = 1;
+        second.dummy = make_dummy_toolhead(.4);
+        second.nozzle.diameter = .4;
+        second.nozzle.minHeight = .07;
+        second.nozzle.maxHeight = .23;
+        second.nozzle.minWidth = .31;
+        second.nozzle.maxWidth = .67;
+        second.nozzle.autoBeadLimits = false;
+        p.tools.push_back(second);
+        const auto original = p.tools.front().nozzle;
+        bool inspected = false;
+        QTimer deadline;
+        deadline.setSingleShot(true);
+        connect(&deadline, &QTimer::timeout, this, [&] {
+            if (auto message = qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+                auto parent = qobject_cast<QDialog *>(message->parentWidget());
+                QWARN(qPrintable(message->text()));
+                message->reject();
+                if (parent)
+                    parent->reject();
+            } else if (auto dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget()))
+                dialog->reject();
+        });
+        deadline.start(10000);
+        QTimer::singleShot(300, [&] {
+            auto dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            QVERIFY(dialog);
+            auto diameter = dialog->findChild<QDoubleSpinBox *>("toolNozzleDiameter");
+            auto minHeight = dialog->findChild<QDoubleSpinBox *>("toolMinBeadHeight");
+            auto maxHeight = dialog->findChild<QDoubleSpinBox *>("toolMaxBeadHeight");
+            auto minWidth = dialog->findChild<QDoubleSpinBox *>("toolMinBeadWidth");
+            auto maxWidth = dialog->findChild<QDoubleSpinBox *>("toolMaxBeadWidth");
+            auto automatic = dialog->findChild<QCheckBox *>("autoNozzleBeadLimits");
+            auto calibrated = dialog->findChild<QCheckBox *>("toolNozzleCalibrated");
+            auto tools = dialog->findChild<QListWidget *>("physicalTools");
+            QVERIFY(diameter && minHeight && maxHeight && minWidth && maxWidth && automatic && calibrated &&
+                    tools);
+            QCOMPARE(minHeight->value(), original.minHeight);
+            QCOMPARE(maxWidth->value(), original.maxWidth);
+            QVERIFY(automatic->isChecked());
+            diameter->setValue(.6);
+            QCOMPARE(minHeight->value(), .3);
+            QCOMPARE(minWidth->value(), .3);
+            QCOMPARE(maxHeight->value(), 1.2);
+            QCOMPARE(maxWidth->value(), 1.2);
+            QVERIFY(!calibrated->isChecked());
+            QVERIFY(minHeight->isEnabled() && maxHeight->isEnabled() && minWidth->isEnabled() &&
+                    maxWidth->isEnabled());
+            minHeight->setValue(.12);
+            maxHeight->setValue(.5);
+            minWidth->setValue(.25);
+            maxWidth->setValue(.95);
+            calibrated->setChecked(true);
+            tools->setCurrentRow(1);
+            QVERIFY(!automatic->isChecked());
+            diameter->setValue(.5);
+            QCOMPARE(minHeight->value(), .07);
+            QCOMPARE(maxHeight->value(), .23);
+            QCOMPARE(minWidth->value(), .31);
+            QCOMPARE(maxWidth->value(), .67);
+            calibrated->setChecked(true);
+            tools->setCurrentRow(0);
+            QVERIFY(automatic->isChecked());
+            QCOMPARE(diameter->value(), .6);
+            QCOMPARE(minHeight->value(), .12);
+            QCOMPARE(maxWidth->value(), .95);
+            automatic->setChecked(false);
+            diameter->setValue(.8);
+            QCOMPARE(minHeight->value(), .12);
+            QCOMPARE(maxWidth->value(), .95);
+            automatic->setChecked(true);
+            QCOMPARE(minHeight->value(), .4);
+            QCOMPARE(minWidth->value(), .4);
+            QCOMPARE(maxHeight->value(), 1.6);
+            QCOMPARE(maxWidth->value(), 1.6);
+            dialog->findChild<QTabWidget *>()->setCurrentIndex(2);
+            auto shots = qEnvironmentVariable("FIVEAXIS_NOZZLE_SCREENSHOTS");
+            if (!shots.isEmpty()) {
+                QApplication::processEvents();
+                dialog->grab().save(shots + "/nozzle-limits-auto.png");
+            }
+            diameter->setValue(5);
+            QCOMPARE(maxHeight->value(), 10.);
+            QCOMPARE(maxWidth->value(), 10.);
+            diameter->setValue(.8);
+            minHeight->setValue(.1);
+            maxHeight->setValue(.5);
+            minWidth->setValue(.3);
+            maxWidth->setValue(1.1);
+            automatic->setChecked(false);
+            calibrated->setChecked(true);
+            dialog->findChild<QTabWidget *>()->setCurrentIndex(2);
+            if (!shots.isEmpty()) {
+                QApplication::processEvents();
+                dialog->grab().save(shots + "/nozzle-limits.png");
+            }
+            inspected = true;
+            dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
+        });
+        QVERIFY(edit_plate(p, nullptr));
+        deadline.stop();
+        QVERIFY(inspected);
+        QTemporaryDir directory;
+        save_project(p, directory.filePath("nozzles.5axis"));
+        auto loaded = load_project(directory.filePath("nozzles.5axis"));
+        QVERIFY(!loaded.tools[0].nozzle.autoBeadLimits);
+        QCOMPARE(loaded.tools[0].nozzle.minHeight, .1);
+        QCOMPARE(loaded.tools[0].nozzle.maxWidth, 1.1);
+        QVERIFY(!loaded.tools[1].nozzle.autoBeadLimits);
+        QCOMPARE(loaded.tools[1].nozzle.minWidth, .31);
+        QCOMPARE(loaded.tools[1].nozzle.maxHeight, .23);
+        auto legacy = project_json(p);
+        auto job = legacy["plateJob"].toObject();
+        auto tools = job["tools"].toArray();
+        auto tool = tools[0].toObject();
+        auto nozzle = tool["nozzle"].toObject();
+        nozzle.remove("autoBeadLimits");
+        tool["nozzle"] = nozzle;
+        tools[0] = tool;
+        job["tools"] = tools;
+        legacy["plateJob"] = job;
+        auto older = project_from_json(legacy);
+        QVERIFY(older.tools[0].nozzle.autoBeadLimits);
+        QCOMPARE(older.tools[0].nozzle.minHeight, .1);
+        QCOMPARE(older.tools[0].nozzle.maxWidth, 1.1);
+    }
     void plate_editor_and_preview() {
         auto p = plate_demo();
         auto original = p.fingerprint();

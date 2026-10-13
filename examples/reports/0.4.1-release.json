@@ -1,0 +1,14 @@
+{
+  "version": "0.4.1",
+  "tests": {
+    "core": 55,
+    "plate": 33,
+    "desktop": 13,
+    "python": 11,
+    "total": 112,
+    "qtIncludesSetupCleanup": true
+  },
+  "feature": "Requested half-to-double diameter limits for both height and width; editable per-tool overrides",
+  "nativeFirmwareValidated": false,
+  "physicalPrintingValidated": false
+}

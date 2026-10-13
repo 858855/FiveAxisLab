@@ -1,4 +1,4 @@
-# Plate jobs, materials and installed tools (0.4.0)
+# Plate jobs, materials and installed tools (0.4.1)
 
 Open **Plate / tools** to enable the plate workflow. Projects contain stable object, material and physical-tool IDs. Choose **Layer-by-layer** or **Complete objects**. Drag the object IDs into a manual order, or enable bounded automatic order search. Slicing does not rearrange object placement.
 
@@ -19,6 +19,8 @@ Paths split at volume intersections and sampled painted boundaries. Generated ma
 Each Tools entry has its own STEP or dimensioned dummy geometry, CAD TCP, nozzle axis, mounting frame, moving-link assignments, installed nozzle, extruder/heater mapping and dock transform. Imported and dummy tools can coexist. The component table includes every physical component by default; visual-only components are an explicit choice. Select exactly one physical nozzle component.
 
 The nozzle may be a component in the toolhead CAD, a separate STEP assembly, or a parameterized dummy nozzle. Separate/dummy nozzle mounting is independent of the existing assembly geometry. Enter usable bead height/width ranges and maximum flow, then confirm the actual installed geometry and calibration. A nozzle diameter change during a print selects another installed physical tool. Hand replacement is a setup change requiring new generation and validation.
+
+**Auto-fill bead limits when nozzle diameter changes** fills both minimum height and width with half the diameter, and both maxima with twice the diameter. For 0.8 mm this gives 0.4–1.6 mm; for 0.6 mm it gives 0.3–1.2 mm. All four fields stay editable. Turn off auto-fill to retain custom limits through subsequent diameter changes; turn it on again to restore the calculated values. The preference and edited limits are saved per tool in projects and machine profiles. Opening a tool or older project preserves its stored limits. Diameter changes still require confirmation of the installed CAD/TCP calibration.
 
 Filament slots sharing a nozzle reference the same tool ID. Its first confirmed route identifies the filament assumed loaded at job start. Additional routes require explicit selector commands and load/unload distances. Arbitrary proprietary feeder macros are not interpreted.
 

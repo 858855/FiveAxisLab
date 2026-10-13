@@ -1,10 +1,12 @@
-# FiveAxisLab 0.4.0
+# FiveAxisLab 0.4.1
 
 Independent C++17 / Qt 6 / OpenGL research application for five-axis FFF. Windows x64 portable build, shared headless core, AGPL-3.0-or-later. This is an initial research implementation, with remaining qualification work recorded in [docs/VALIDATION.md](docs/VALIDATION.md).
 
 ## Run
 
-Extract the locally packaged `dist/FiveAxisLab-0.4.0-win64.zip` and run `FiveAxisLab.exe`. No SDK or Python is needed to run the packaged desktop app. The portable folder also contains `fiveaxis_cli.exe`, example projects, CAD fixtures, optional GPU backends, controller integration, dependency notices and validation reports. Binary packages and the SDK are excluded from Git; a fresh clone can produce them using the build instructions below.
+Extract the locally packaged `dist/FiveAxisLab-0.4.1-win64.zip` and run `FiveAxisLab.exe`. No SDK or Python is needed to run the packaged desktop app. The portable folder also contains `fiveaxis_cli.exe`, example projects, CAD fixtures, optional GPU backends, controller integration, dependency notices and validation reports. Binary packages and the SDK are excluded from Git; a fresh clone can produce them using the build instructions below.
+
+Version 0.4.1 adds automatic bead-limit filling in **Plate / tools → Tools and nozzles**: changing nozzle diameter fills both height and width with a minimum of half the diameter and a maximum of twice the diameter (0.8 mm → 0.4–1.6 mm). All limits remain editable; disable auto-fill to keep custom limits through later diameter changes. The preference and values are saved per tool. Opening an existing project preserves its stored limits.
 
 Version 0.4 adds **Plate / tools**: schema-2 objects, materials, per-tool STEP/dummy geometry, installed nozzles, surface painting and volume/role assignments, shared-nozzle feeder recipes, detachable tool changes, purge structures, complete-object sequencing and whole-plate collision checks. Simulation restores active/parked tools and material history while scrubbing. CPU work uses a bounded pool; optional CUDA/Vulkan plugins evaluate verified field/candidate/preview batches. Auto retains CPU where measured GPU cost is higher. [Plate controls](docs/PLATE_JOBS.md), [tool changes and replay](docs/TOOL_CHANGES.md), [compute execution](docs/COMPUTE.md), [release evidence](docs/RELEASE_0_4.md).
 

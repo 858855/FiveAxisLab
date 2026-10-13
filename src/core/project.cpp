@@ -683,6 +683,9 @@ QJsonObject plate_json(const Project &p) {
                            {"dummy", n.dummyNozzle},
                            {"separate", cad(n.separateNozzle)},
                            {"mount", matrix(n.nozzleMount)}};
+        // Default-on omission preserves existing schema-2 motion fingerprints.
+        if (!n.autoBeadLimits)
+            nozzle["autoBeadLimits"] = false;
         QJsonObject change{{"release", recipe(t.change.release)}, {"pickup", recipe(t.change.pickup)},
                            {"retract", t.change.retract},         {"load", t.change.load},
                            {"unload", t.change.unload},           {"seconds", t.change.changeSeconds},
@@ -863,6 +866,7 @@ void read_plate(Project &p, const QJsonObject &j) {
         t.nozzle.maxHeight = n["maxHeight"].toDouble();
         t.nozzle.minWidth = n["minWidth"].toDouble();
         t.nozzle.maxWidth = n["maxWidth"].toDouble();
+        t.nozzle.autoBeadLimits = n["autoBeadLimits"].toBool(true);
         t.nozzle.maxFlow = n["maxFlow"].toDouble();
         t.nozzle.protrusion = n["protrusion"].toDouble();
         t.nozzle.calibrated = n["calibrated"].toBool();
