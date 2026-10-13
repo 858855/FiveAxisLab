@@ -4,5 +4,5 @@ PASS   : DesktopTests::initTestCase()
 PASS   : DesktopTests::toolpaths_dummy_and_process_controls()
 PASS   : DesktopTests::playback_and_background_replay()
 PASS   : DesktopTests::cleanupTestCase()
-Totals: 4 passed, 0 failed, 0 skipped, 0 blacklisted, 2395ms
+Totals: 4 passed, 0 failed, 0 skipped, 0 blacklisted, 2305ms
 ********* Finished testing of DesktopTests *********

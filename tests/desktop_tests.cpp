@@ -27,7 +27,19 @@ class DesktopTests : public QObject {
         auto view=window.findChild<Viewport*>("simulationViewport"); auto paths=window.findChild<QComboBox*>("toolpathMode");
         auto support=window.findChild<QComboBox*>("supportMode"); auto dummy=window.findChild<QCheckBox*>("dummyToolhead");
         QVERIFY(view && paths && support && dummy); QVERIFY(view->toolpath_segment_count()>0);
-        auto visible=view->grabFramebuffer(); paths->setCurrentIndex(3); QTest::qWait(50);
+        auto visible=view->grabFramebuffer();
+        if(!qEnvironmentVariable("FIVEAXIS_DEBUG_FRAME").isEmpty()) visible.save(qEnvironmentVariable("FIVEAXIS_DEBUG_FRAME"));
+        auto dimBluePixels=[](const QImage &image) {
+            int count=0;
+            for(int y=0;y<image.height();++y) for(int x=0;x<image.width();++x) {
+                auto c=image.pixelColor(x,y);
+                if(std::abs(c.red()-44)<=6 && std::abs(c.green()-64)<=6 && std::abs(c.blue()-92)<=6) ++count;
+            }
+            return count;
+        };
+        QVERIFY(dimBluePixels(visible)>20);
+        view->repaint(); QVERIFY(dimBluePixels(view->grabFramebuffer())>20);
+        paths->setCurrentIndex(3); QTest::qWait(50);
         QCOMPARE(view->path_mode(),3); auto hidden=view->grabFramebuffer(); QVERIFY(visible!=hidden);
         paths->setCurrentIndex(2); QCOMPARE(view->path_mode(),2); paths->setCurrentIndex(0);
         support->setCurrentIndex(1); QCOMPARE(window.current_project().process.supportMode,SupportMode::Reduced);

@@ -211,7 +211,7 @@ void Viewport::initializeGL() {
     initializeOpenGLFunctions();
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     shader.addShaderFromSourceCode(
         QOpenGLShader::Vertex,
         "attribute vec3 position;attribute vec3 normal;attribute vec3 fieldColor;uniform mat4 mvp;uniform "
@@ -306,6 +306,12 @@ void Viewport::draw_mesh(const Mesh &m, const Transform &t, QVector4D color, int
 void Viewport::paintGL() {
     QPainter painter(this);
     painter.beginNativePainting();
+    // QPainter may leave premultiplied-alpha state from its preceding overlay pass.
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glEnable(GL_BLEND);
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_TRUE);
     glClearColor(.055f, .07f, .095f, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     if (!project) {
@@ -452,7 +458,7 @@ void Viewport::draw_paths(const Transform &bed) {
     for(int attribute:{pos,normal,field}) shader.enableAttributeArray(attribute);
     shader.setAttributeBuffer(pos,GL_FLOAT,0,3,9*sizeof(float)); shader.setAttributeBuffer(normal,GL_FLOAT,3*sizeof(float),3,9*sizeof(float));
     shader.setAttributeBuffer(field,GL_FLOAT,6*sizeof(float),3,9*sizeof(float));
-    glDepthMask(GL_FALSE); glLineWidth(2);
+    glDepthMask(GL_FALSE); glDepthFunc(GL_LEQUAL); glLineWidth(2);
     auto draw=[&](int begin,int end,float alpha) {
         shader.setUniformValue("color",QVector4D(1,1,1,alpha));
         if(travelPaths) glDrawArrays(GL_LINES,begin*2,(end-begin)*2);
@@ -485,7 +491,7 @@ void Viewport::draw_paths(const Transform &bed) {
             glDrawArrays(GL_LINES,0,2); shader.disableAttributeArray(pos); shader.release(); active.release(); active.destroy();
         }
     }
-    glLineWidth(1); glDepthMask(GL_TRUE);
+    glLineWidth(1); glDepthMask(GL_TRUE); glDepthFunc(GL_LESS);
 }
 void Viewport::mousePressEvent(QMouseEvent *e) {
     last = pressed = e->pos();
