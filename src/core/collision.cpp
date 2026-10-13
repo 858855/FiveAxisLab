@@ -1,4 +1,5 @@
 #include "collision.h"
+#include "process.h"
 #include "geometry.h"
 #include "slicing.h"
 #include "stress.h"
@@ -112,7 +113,7 @@ struct CollisionScene::Impl {
     fcl::DynamicAABBTreeCollisionManagerd worldManager, partManager;
     double radius = 1;
     explicit Impl(const Project &p) : project(p) {
-        for (auto &c : p.toolhead.components) {
+        for (auto &c : p.active_toolhead().components) {
             if (c.visualOnly)
                 continue;
             if (c.mesh.empty())
@@ -122,21 +123,21 @@ struct CollisionScene::Impl {
             t.bounds = c.mesh.bounds();
             t.full = geometry(c.mesh);
             if (c.nozzle) {
-                t.maskedMesh = noncontact_mesh(c, p.toolhead);
+                t.maskedMesh = noncontact_mesh(c, p.active_toolhead());
                 if (!t.maskedMesh.empty())
                     t.masked = geometry(t.maskedMesh);
             }
             tools.push_back(t);
             for (auto &v : c.mesh.vertices)
                 radius =
-                    std::max(radius, p.machine.layout == Layout::RotaryBed ? (v - p.toolhead.tcp).norm()
-                                                                           : (p.toolhead.mount * v).norm());
+                    std::max(radius, p.machine.layout == Layout::RotaryBed ? (v - p.active_toolhead().tcp).norm()
+                                                                           : (p.active_toolhead().mount * v).norm());
         }
         for (size_t i = 0; i < tools.size(); ++i)
             for (size_t j = i + 1; j < tools.size(); ++j)
                 if (tools[i].component->link != tools[j].component->link)
                     movingPairs = true;
-        for (const auto &rule : p.toolhead.interfaces) {
+        for (const auto &rule : p.active_toolhead().interfaces) {
             auto find = [&](const QString &id) {
                 for (size_t i = 0; i < tools.size(); ++i)
                     if (tools[i].component->id == id)
@@ -184,7 +185,7 @@ struct CollisionScene::Impl {
                 width = std::max(width, s.width);
                 height = std::max(height, s.height);
             }
-        radius = std::max(radius, p.toolhead.contactRadius + p.machine.clearance +
+        radius = std::max(radius, p.active_toolhead().contactRadius + p.machine.clearance +
                                       Vec3((.2 + width) / 2, width / 2, height / 2).norm() + .1);
     }
 };
@@ -232,7 +233,7 @@ CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, c
     CollisionEvent result;
     result.status = Status::Clear;
     result.clearance = 1e100;
-    if (!in_limits(p.machine, p.toolhead, q)) {
+    if (!in_limits(p.machine, p.active_toolhead(), q)) {
         result.status = Status::Collision;
         result.first = "Machine";
         result.second = "Axis limits";
@@ -369,13 +370,13 @@ CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, c
         return false;
     };
     for (auto &tool : impl->tools) {
-        Transform world = component_pose(p.machine, p.toolhead, *tool.component, q);
+        Transform world = component_pose(p.machine, p.active_toolhead(), *tool.component, q);
         for (int frame = 0; frame < 2; ++frame) {
             Transform tr = frame == 0 ? world : bed.inverse() * world;
             fcl::CollisionObjectd object(tool.full, tr);
             object.setUserData(nullptr);
             Query query{&tool,
-                        &p.toolhead,
+                        &p.active_toolhead(),
                         &q,
                         &result,
                         extruding,
@@ -401,8 +402,8 @@ CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, c
             auto &b = impl->tools[rule ? rule->second : j];
             if (a.component->link == b.component->link || p.machine.layout == Layout::RotaryBed)
                 continue;
-            Transform ta = component_pose(p.machine, p.toolhead, *a.component, q),
-                      tb = component_pose(p.machine, p.toolhead, *b.component, q);
+            Transform ta = component_pose(p.machine, p.active_toolhead(), *a.component, q),
+                      tb = component_pose(p.machine, p.active_toolhead(), *b.component, q);
             auto mask = rule ? rule->outside : a.full;
             double clearance = 1e100;
             Vec3 witness = ta.translation();
@@ -480,7 +481,7 @@ bool CollisionScene::check_interval(const JointState &a, const JointState &b, bo
             return false;
         }
         double mid = (left + right) / 2;
-        JointState q = interpolate_motion(impl->project.machine, impl->project.toolhead, a, b, mid);
+        JointState q = interpolate_motion(impl->project.machine, impl->project.active_toolhead(), a, b, mid);
         Vec3 point = part_position(impl->project.machine, q);
         auto hit = check_pose(q, extruding, point);
         ++report.checkedIntervals;
@@ -492,9 +493,9 @@ bool CollisionScene::check_interval(const JointState &a, const JointState &b, bo
             report.status = Status::Collision;
             return false;
         }
-        auto x = interpolate_motion(impl->project.machine, impl->project.toolhead, a, b, left),
-             y = interpolate_motion(impl->project.machine, impl->project.toolhead, a, b, right);
-        double bound = movement_bound(impl->project.machine, impl->project.toolhead, x, y, impl->radius);
+        auto x = interpolate_motion(impl->project.machine, impl->project.active_toolhead(), a, b, left),
+             y = interpolate_motion(impl->project.machine, impl->project.active_toolhead(), a, b, right);
+        double bound = movement_bound(impl->project.machine, impl->project.active_toolhead(), x, y, impl->radius);
         if (impl->project.machine.layout == Layout::TiltingHead && impl->movingPairs)
             bound *= 2;
         double margin = impl->project.machine.clearance;
@@ -529,12 +530,17 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
     CollisionReport r;
     r.fingerprint = p.fingerprint();
     r.status = Status::Clear;
-    for (auto &c : p.toolhead.components)
+    if(!p.pathProcessFingerprint.isEmpty() && p.pathProcessFingerprint!=process_fingerprint(p.process)) {
+        r.status=Status::Unresolved;
+        r.events.push_back({Status::Unresolved,"Print process","Stale toolpaths","Process settings changed; slice again to generate matching motion"});
+        return r;
+    }
+    for (auto &c : p.active_toolhead().components)
         if (!c.visualOnly)
             r.modeledComponents.push_back(component_label(c));
     for (auto &f : p.fixtures)
         r.modeledComponents.push_back(f.name);
-    if (p.toolhead.components.empty() || p.path.size() < 2) {
+    if (p.active_toolhead().components.empty() || p.path.size() < 2) {
         r.status = Status::Unresolved;
         r.events.push_back({Status::Unresolved, "Setup", "Missing geometry or path",
                             "Import a toolhead and generate a path first"});
@@ -543,7 +549,7 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
     int physical = 0, nozzles = 0;
     bool hasExtrusion =
         std::any_of(p.path.begin(), p.path.end(), [](const Sample &s) { return s.deltaE > 0; });
-    for (const auto &c : p.toolhead.components)
+    for (const auto &c : p.active_toolhead().components)
         if (!c.visualOnly) {
             ++physical;
             if (c.nozzle) {
@@ -562,8 +568,8 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
                             "Extrusion requires one physical nozzle and a modeled toolhead"});
         return r;
     }
-    if (p.toolhead.axis.norm() < 1e-8 ||
-        (p.toolhead.mount.linear() * p.toolhead.axis.normalized() - Vec3::UnitZ()).norm() > 1e-6) {
+    if (p.active_toolhead().axis.norm() < 1e-8 ||
+        (p.active_toolhead().mount.linear() * p.active_toolhead().axis.normalized() - Vec3::UnitZ()).norm() > 1e-6) {
         r.status = Status::Unresolved;
         r.events.push_back({Status::Unresolved, "Setup", "Nozzle frame",
                             "Align the zero-pose nozzle axis to +Z in the setup wizard"});
@@ -575,7 +581,7 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
         if (!s.position.allFinite() || !s.direction.allFinite() || s.direction.norm() < 1e-8 ||
             !std::isfinite(s.time) || !std::isfinite(s.deltaE) || s.time < lastTime ||
             (part_position(p.machine, s.joint) - s.position).norm() > p.machine.chordTolerance + 1e-5 ||
-            (part_direction(p.machine, p.toolhead, s.joint) - s.direction.normalized()).norm() > 1e-5) {
+            (part_direction(p.machine, p.active_toolhead(), s.joint) - s.direction.normalized()).norm() > 1e-5) {
             r.status = Status::Unresolved;
             CollisionEvent e;
             e.status = Status::Unresolved;
@@ -609,8 +615,8 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
             throw std::runtime_error("Deposition movement exceeds accuracy budget");
         for (int k = 0; k < steps; ++k) {
             double u = double(k) / steps, v = double(k + 1) / steps;
-            JointState x = interpolate_motion(p.machine, p.toolhead, a.joint, b.joint, u),
-                       y = interpolate_motion(p.machine, p.toolhead, a.joint, b.joint, v);
+            JointState x = interpolate_motion(p.machine, p.active_toolhead(), a.joint, b.joint, u),
+                       y = interpolate_motion(p.machine, p.active_toolhead(), a.joint, b.joint, v);
             Vec3 pa = part_position(p.machine, x), pb = part_position(p.machine, y);
             auto end = scene.check_pose(y, b.deltaE > 0, pb);
             r.minimumClearance = std::min(r.minimumClearance, end.clearance);
@@ -624,8 +630,8 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
                                      a.time + (b.time - a.time) * v, r, cancel);
             if (b.deltaE > 0)
                 scene.deposit(pa, pb, b.width, b.height, b.role,
-                              part_direction(p.machine, p.toolhead,
-                                             interpolate_motion(p.machine, p.toolhead, x, y, .5)));
+                              part_direction(p.machine, p.active_toolhead(),
+                                             interpolate_motion(p.machine, p.active_toolhead(), x, y, .5)));
             if (r.events.size() > 200 || r.status == Status::Cancelled)
                 break;
         }
@@ -709,7 +715,7 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
                         (original * std::cos(tilt) + (x * std::cos(az) + y * std::sin(az)) * std::sin(tilt))
                             .normalized();
                     for (auto q :
-                         inverse_kinematics(p.machine, target.position, n, previous.joint, p.toolhead)) {
+                         inverse_kinematics(p.machine, target.position, n, previous.joint, p.active_toolhead())) {
                         if (++trials > 256)
                             break;
                         CollisionReport test;
@@ -749,7 +755,7 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
                 q.xyz = Vec3(s->values[0], s->values[1], s->values[2]);
                 q.a = s->values[3];
                 q.b = s->values[4];
-                return pose_from_axes(p.machine, p.toolhead, q);
+                return pose_from_axes(p.machine, p.active_toolhead(), q);
             };
             setup.setStateValidityChecker([&](const ob::State *state) {
                 auto q = from(state);
@@ -758,8 +764,8 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
             setup.getSpaceInformation()->setStateValidityCheckingResolution(.0005);
             ob::ScopedState<> start(space), goal(space);
             for (int k = 0; k < 3; ++k) {
-                start[k] = controller_axes(p.machine, p.toolhead, previous.joint).xyz[k];
-                goal[k] = controller_axes(p.machine, p.toolhead, target.joint).xyz[k];
+                start[k] = controller_axes(p.machine, p.active_toolhead(), previous.joint).xyz[k];
+                goal[k] = controller_axes(p.machine, p.active_toolhead(), target.joint).xyz[k];
             }
             start[3] = previous.joint.a;
             start[4] = previous.joint.b;
@@ -780,7 +786,7 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
                     s.deltaE = k + 1 == path.getStateCount() ? target.deltaE : 0;
                     s.joint = from(path.getState(k));
                     s.position = part_position(p.machine, s.joint);
-                    s.direction = part_direction(p.machine, p.toolhead, s.joint);
+                    s.direction = part_direction(p.machine, p.active_toolhead(), s.joint);
                     CollisionReport test;
                     test.status = Status::Clear;
                     if (!scene.check_interval(last, s.joint, false, Vec3::Zero(), Vec3::Zero(), int(i), 0, 1,

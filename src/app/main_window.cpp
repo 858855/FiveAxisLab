@@ -3,6 +3,7 @@
 #include "core/controllers.h"
 #include "core/geometry.h"
 #include "core/project.h"
+#include "core/process.h"
 #include "core/slicing.h"
 #include "core/step_import.h"
 #include "core/stress.h"
@@ -16,6 +17,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLineEdit>
+#include <QJsonDocument>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPainter>
@@ -27,6 +29,8 @@
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTableWidget>
+#include <QTabWidget>
+#include <QSpinBox>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
@@ -112,6 +116,10 @@ MainWindow::MainWindow() : project(demo_project()) {
     mf->addRow("Controller", controller);
     mf->addRow("Layout", layout);
     mf->addRow(extension);
+    dummyToolhead = new QCheckBox("Generate with dummy toolhead");
+    dummyToolhead->setObjectName("dummyToolhead");
+    dummyToolhead->setToolTip("Use a synthetic nozzle, heat break, heater block and fan shroud. Your imported STEP assembly is retained.");
+    mf->addRow(dummyToolhead);
     left->addWidget(machineGroup);
     button("Machine setup / toolhead STEP", left, [this] { machine_setup(); });
     button("Import toolhead STEP", left, [this] { import_step(); });
@@ -119,21 +127,24 @@ MainWindow::MainWindow() : project(demo_project()) {
     button("Import printable part", left, [this] { import_part(); });
     auto processGroup = new QGroupBox("Print process");
     auto pf = new QFormLayout(processGroup);
-    layerHeight = spin(.5, .05, 1);
-    lineWidth = spin(.8, .1, 2);
+    layerHeight = spin(.5, .01, 2, 3);
+    lineWidth = spin(.8, .01, 5, 3);
     infillDensity = spin(25, 0, 100, 0);
-    speed = spin(25, 1, 200, 0);
+    speed = spin(25, .1, 1000, 1);
     curved = new QCheckBox("Curved layers from stress field");
     curved->setChecked(true);
-    supports = new QCheckBox("Generate removable supports");
-    supports->setChecked(true);
+    supportMode = new QComboBox;
+    supportMode->setObjectName("supportMode");
+    supportMode->addItems({"Normal", "Reduced", "No supports"});
     pf->addRow("Layer height · mm", layerHeight);
     pf->addRow("Line width · mm", lineWidth);
     pf->addRow("Infill · %", infillDensity);
     pf->addRow("Speed · mm/s", speed);
     pf->addRow(curved);
-    pf->addRow(supports);
+    pf->addRow("Supports", supportMode);
     left->addWidget(processGroup);
+    button("Process settings · Orca options", left, [this] { process_settings(); });
+    button("Import Orca process JSON", left, [this] { import_orca_settings(); });
     auto structure = new QGroupBox("Strength");
     auto sf = new QVBoxLayout(structure);
     selection = new QComboBox;
@@ -180,7 +191,26 @@ MainWindow::MainWindow() : project(demo_project()) {
     controls->addWidget(next);
     controls->addStretch();
     right->addLayout(controls);
+    auto pathControls = new QHBoxLayout;
+    pathControls->addWidget(new QLabel("Toolpaths"));
+    auto paths = new QComboBox;
+    paths->setObjectName("toolpathMode");
+    paths->addItems({"Full job", "Up to nozzle", "Current layer", "Hidden"});
+    pathControls->addWidget(paths);
+    auto travels = new QCheckBox("Travel paths");
+    travels->setObjectName("travelPaths");
+    travels->setChecked(true);
+    pathControls->addWidget(travels);
+    auto deposited = new QCheckBox("Deposited material");
+    deposited->setChecked(true);
+    pathControls->addWidget(deposited);
+    pathControls->addStretch();
+    right->addLayout(pathControls);
     viewport = new Viewport;
+    viewport->setObjectName("simulationViewport");
+    connect(paths, &QComboBox::currentIndexChanged, viewport, &Viewport::set_path_mode);
+    connect(travels, &QCheckBox::toggled, viewport, &Viewport::set_travel_paths);
+    connect(deposited, &QCheckBox::toggled, viewport, &Viewport::set_deposited_visible);
     viewport->set_project(&project);
     right->addWidget(viewport, 1);
     auto transport = new QHBoxLayout;
@@ -243,6 +273,8 @@ MainWindow::MainWindow() : project(demo_project()) {
             Project p;
             p.machine = project.machine;
             p.toolhead = project.toolhead;
+            p.dummyToolhead = project.dummyToolhead;
+            p.useDummyToolhead = project.useDummyToolhead;
             p.fixtures = project.fixtures;
             save_project(p, file);
         } catch (const std::exception &e) {
@@ -260,6 +292,8 @@ MainWindow::MainWindow() : project(demo_project()) {
             auto p = load_project(file);
             project.machine = p.machine;
             project.toolhead = p.toolhead;
+            project.dummyToolhead = p.dummyToolhead;
+            project.useDummyToolhead = p.useDummyToolhead;
             project.fixtures = p.fixtures;
             invalidate();
             if (!project.path.empty())
@@ -359,7 +393,8 @@ MainWindow::MainWindow() : project(demo_project()) {
         project.process.infill = infillDensity->value() / 100;
         project.process.speed = speed->value();
         project.process.curved = curved->isChecked();
-        project.process.supports = supports->isChecked();
+        project.process.supportMode = SupportMode(supportMode->currentIndex());
+        project.process.supports = supportMode->currentIndex()!=2;
         project.invalidate();
         refresh();
     };
@@ -367,7 +402,14 @@ MainWindow::MainWindow() : project(demo_project()) {
         connect(s, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
                 [settings](double) { settings(); });
     connect(curved, &QCheckBox::toggled, this, [settings](bool) { settings(); });
-    connect(supports, &QCheckBox::toggled, this, [settings](bool) { settings(); });
+    connect(supportMode, &QComboBox::currentIndexChanged, this, [settings](int) { settings(); });
+    connect(dummyToolhead, &QCheckBox::toggled, this, [this](bool enabled) {
+        if(enabled && project.dummyToolhead.components.empty())
+            project.dummyToolhead = make_dummy_toolhead(project.process.nozzleDiameter);
+        project.useDummyToolhead = enabled;
+        invalidate();
+        if(!project.path.empty()) run("Regenerate");
+    });
     connect(viewport, &Viewport::face_picked, this, [this](int face) {
         if (selection->currentIndex() == 1) {
             if (!fixedFaces.erase(face))
@@ -439,7 +481,7 @@ void MainWindow::show_error(const QString &message) {
 }
 void MainWindow::refresh() {
     QSignalBlocker a(controller), b(layout), c(extension), d(layerHeight), e(lineWidth), f(infillDensity),
-        g(speed), h(curved), i(supports);
+        g(speed), h(curved), i(supportMode), j(dummyToolhead);
     controller->setCurrentIndex(int(project.machine.controller));
     layout->setCurrentIndex(int(project.machine.layout));
     extension->setChecked(project.machine.klipperExtension);
@@ -449,7 +491,8 @@ void MainWindow::refresh() {
     infillDensity->setValue(project.process.infill * 100);
     speed->setValue(project.process.speed);
     curved->setChecked(project.process.curved);
-    supports->setChecked(project.process.supports);
+    supportMode->setCurrentIndex(project.process.supports?int(project.process.supportMode):2);
+    dummyToolhead->setChecked(project.useDummyToolhead);
     viewport->set_project(&project);
     viewport->set_selected(fixedFaces, forceFaces);
     auto events = static_cast<EventTimeline *>(timeline);
@@ -459,7 +502,7 @@ void MainWindow::refresh() {
             events->marks.push_back(event.time / project.path.back().time);
     events->update();
     summary->setText(QString("%1 toolhead components\n%2 movements · %3 s\nFEM: %4")
-                         .arg(project.toolhead.components.size())
+                         .arg(project.active_toolhead().components.size())
                          .arg(project.path.size())
                          .arg(project.path.empty() ? 0 : project.path.back().time, 0, 'f', 1)
                          .arg(project.stress.directional      ? "Complete stress tensors"
@@ -473,6 +516,12 @@ void MainWindow::refresh() {
                   .arg(project.report.checkedIntervals)
             : QString("Export blocked\n%1 collision / unresolved events").arg(project.report.events.size()));
     validation->setStyleSheet(current ? "color:#59d5b7;" : "color:#eeb862;");
+    double supportVolume=0;
+    for(const auto &sample:project.path)
+        if(sample.role==Role::Support && sample.deltaE>0)
+            supportVolume+=sample.deltaE*pi*std::pow(project.machine.filamentDiameter/2,2);
+    summary->setText(summary->text()+QString("\nSupport material: %1 mm³").arg(supportVolume,0,'f',1));
+    if(project.useDummyToolhead) summary->setText(summary->text()+"\nDummy geometry only");
 }
 void MainWindow::invalidate() {
     bool valid = project.depositionValid;
@@ -567,6 +616,7 @@ void MainWindow::import_step() {
         return;
     execute("Import STEP assembly", [file](Project &p, std::atomic_bool *cancel) {
         p.toolhead = load_step_assembly(file, .02, cancel);
+        p.useDummyToolhead = false;
         p.invalidate();
         p.diagnostics
             << "Toolhead imported. Open Machine setup to calibrate the nozzle tip, axis and moving links.";
@@ -586,19 +636,19 @@ void MainWindow::machine_setup() {
     Project copy = project;
     left->addWidget(new QLabel(
         "Source STEP length units: " +
-        (copy.toolhead.sourceUnits.isEmpty() ? QString("synthetic mm") : copy.toolhead.sourceUnits) +
+        (copy.active_toolhead().sourceUnits.isEmpty() ? QString("synthetic mm") : copy.active_toolhead().sourceUnits) +
         " · converted to mm"));
-    auto tcp = new QLineEdit(vector_text(copy.toolhead.tcp)),
-         axis = new QLineEdit(vector_text(copy.toolhead.axis)),
-         mount = new QLineEdit(vector_text(copy.toolhead.mount.translation())),
+    auto tcp = new QLineEdit(vector_text(copy.active_toolhead().tcp)),
+         axis = new QLineEdit(vector_text(copy.active_toolhead().axis)),
+         mount = new QLineEdit(vector_text(copy.active_toolhead().mount.translation())),
          bed = new QLineEdit(vector_text(copy.machine.bedPivot)),
          pa = new QLineEdit(vector_text(copy.machine.headPivotA)),
          pb = new QLineEdit(vector_text(copy.machine.headPivotB)),
          minimum = new QLineEdit(vector_text(copy.machine.minXYZ)),
          maximum = new QLineEdit(vector_text(copy.machine.maxXYZ));
     auto clearance = spin(copy.machine.clearance, 0, 10, 3),
-         radius = spin(copy.toolhead.contactRadius, .01, 5, 3),
-         height = spin(copy.toolhead.contactHeight, .01, 5, 3);
+         radius = spin(copy.active_toolhead().contactRadius, .01, 5, 3),
+         height = spin(copy.active_toolhead().contactHeight, .01, 5, 3);
     form->addRow("Nozzle tip · CAD mm", tcp);
     form->addRow("Axis · tip toward toolhead", axis);
     form->addRow("Mount translation · mm", mount);
@@ -610,12 +660,12 @@ void MainWindow::machine_setup() {
     form->addRow("Required clearance · mm", clearance);
     form->addRow("Tip contact radius · mm", radius);
     form->addRow("Tip contact height · mm", height);
-    auto table = new QTableWidget(int(copy.toolhead.components.size()), 4);
+    auto table = new QTableWidget(int(copy.active_toolhead().components.size()), 4);
     table->setHorizontalHeaderLabels({"Component / instance", "Moving link", "Nozzle", "Visual only"});
     std::vector<QComboBox *> links;
     std::vector<QCheckBox *> nozzles, visuals;
-    for (size_t i = 0; i < copy.toolhead.components.size(); ++i) {
-        auto &c = copy.toolhead.components[i];
+    for (size_t i = 0; i < copy.active_toolhead().components.size(); ++i) {
+        auto &c = copy.active_toolhead().components[i];
         table->setItem(i, 0, new QTableWidgetItem(c.name + " · " + c.id));
         auto link = new QComboBox;
         link->addItems({"Carriage", "Rotary stage", "Nozzle assembly"});
@@ -636,7 +686,7 @@ void MainWindow::machine_setup() {
     auto interfaces = new QTextEdit;
     interfaces->setMaximumHeight(75);
     interfaces->setPlaceholderText("First id | second id | CAD center x,y,z | box size x,y,z");
-    for (const auto &rule : copy.toolhead.interfaces)
+    for (const auto &rule : copy.active_toolhead().interfaces)
         interfaces->append(rule.first + " | " + rule.second + " | " + vector_text(rule.center) + " | " +
                            vector_text(rule.size));
     left->addWidget(new QLabel("Bounded assembly interfaces · first component CAD frame"));
@@ -668,19 +718,19 @@ void MainWindow::machine_setup() {
     });
     auto updatePose = [&] {
         try {
-            copy.toolhead.tcp = parse_vector(tcp->text());
+            copy.active_toolhead().tcp = parse_vector(tcp->text());
             auto n = parse_vector(axis->text());
             if (n.norm() < 1e-8)
                 return;
-            copy.toolhead.axis = n.normalized();
-            copy.toolhead.mount = translation(parse_vector(mount->text()));
-            copy.toolhead.mount.linear() =
-                Eigen::Quaterniond::FromTwoVectors(copy.toolhead.axis, Vec3::UnitZ()).toRotationMatrix();
+            copy.active_toolhead().axis = n.normalized();
+            copy.active_toolhead().mount = translation(parse_vector(mount->text()));
+            copy.active_toolhead().mount.linear() =
+                Eigen::Quaterniond::FromTwoVectors(copy.active_toolhead().axis, Vec3::UnitZ()).toRotationMatrix();
             copy.machine.bedPivot = parse_vector(bed->text());
             copy.machine.headPivotA = parse_vector(pa->text());
             copy.machine.headPivotB = parse_vector(pb->text());
             for (size_t i = 0; i < links.size(); ++i)
-                copy.toolhead.components[i].link = Link(links[i]->currentIndex());
+                copy.active_toolhead().components[i].link = Link(links[i]->currentIndex());
         } catch (...) {
             return;
         }
@@ -697,7 +747,7 @@ void MainWindow::machine_setup() {
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, [&] {
         try {
-            ToolheadAssembly assembly = project.toolhead;
+            ToolheadAssembly assembly = project.active_toolhead();
             assembly.tcp = parse_vector(tcp->text());
             assembly.axis = parse_vector(axis->text());
             if (!assembly.axis.allFinite() || assembly.axis.norm() < 1e-8)
@@ -735,7 +785,7 @@ void MainWindow::machine_setup() {
             auto min = parse_vector(minimum->text()), max = parse_vector(maximum->text());
             if ((max - min).minCoeff() <= 0)
                 throw std::runtime_error("XYZ maximum must exceed minimum");
-            project.toolhead = std::move(assembly);
+            project.active_toolhead() = std::move(assembly);
             project.machine.bedPivot = parse_vector(bed->text());
             project.machine.headPivotA = parse_vector(pa->text());
             project.machine.headPivotB = parse_vector(pb->text());

@@ -19,7 +19,10 @@ constexpr double pi = 3.14159265358979323846;
 enum class Layout { RotaryBed, TiltingHead };
 enum class Controller { Duet, Klipper };
 enum class Link { Carriage, RotaryStage, Nozzle };
-enum class Role { Travel, Wall, Infill, Support, Retract };
+enum class Role { Travel, Wall, Infill, Support, Retract, OuterWall, SolidInfill };
+enum class InfillPattern { StressAligned, Rectilinear, Grid };
+enum class SeamPosition { LowStress, Aligned, Back, Nearest, Random };
+enum class SupportMode { Normal, Reduced, None };
 enum class Status { Clear, Collision, Unresolved, Cancelled };
 
 struct Mesh {
@@ -143,6 +146,17 @@ struct ProcessSettings {
     bool curved = true, supports = true;
     int wallCount = 2;
     double maximumBridge = 5;
+    double nozzleDiameter = .4, firstLayerHeight = 0, firstLayerWidth = 0;
+    double outerWallWidth = 0, innerWallWidth = 0, infillWidth = 0, solidWidth = 0;
+    int topShellLayers = 0, bottomShellLayers = 0;
+    bool outerWallFirst = true;
+    InfillPattern infillPattern = InfillPattern::StressAligned;
+    SeamPosition seam = SeamPosition::LowStress;
+    double infillAngle = 0;
+    double outerWallSpeed = 0, innerWallSpeed = 0, infillSpeed = 0, solidSpeed = 0;
+    double supportSpeed = 0, firstLayerSpeed = 0, travelSpeed = 100, travelLift = 3;
+    SupportMode supportMode = SupportMode::Normal;
+    double supportSpacing = 0, supportReduction = 2;
 };
 struct DepositionReport {
     bool checked = false;
@@ -159,6 +173,10 @@ struct Project {
     Transform partPlacement = Transform::Identity();
     VolumeMesh volume;
     ToolheadAssembly toolhead;
+    ToolheadAssembly dummyToolhead;
+    bool useDummyToolhead = false;
+    const ToolheadAssembly &active_toolhead() const { return useDummyToolhead ? dummyToolhead : toolhead; }
+    ToolheadAssembly &active_toolhead() { return useDummyToolhead ? dummyToolhead : toolhead; }
     MachineProfile machine;
     ProcessSettings process;
     StressField stress;
@@ -167,6 +185,7 @@ struct Project {
     DepositionReport deposition;
     std::vector<Fixture> fixtures;
     std::vector<Sample> path;
+    QString pathProcessFingerprint;
     CollisionReport report;
     QStringList diagnostics;
     bool depositionValid = false;
@@ -179,6 +198,14 @@ struct SimulationState {
     JointState joint;
     std::vector<std::pair<Vec3, Vec3>> deposited;
 };
+struct ToolpathSegment {
+    Vec3 start, end;
+    int move = 0, layer = 0;
+    Role role = Role::Travel;
+    double begin = 0, finish = 1;
+};
+ToolheadAssembly make_dummy_toolhead(double nozzleDiameter = .4);
+std::vector<ToolpathSegment> simulation_toolpaths(const Project &p);
 Transform translation(const Vec3 &p);
 Transform rotation_x(double a);
 Transform rotation_y(double a);

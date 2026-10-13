@@ -15,6 +15,20 @@
 #include <zip.h>
 
 namespace fiveaxis {
+ToolheadAssembly make_dummy_toolhead(double nozzleDiameter) {
+    if (!std::isfinite(nozzleDiameter) || nozzleDiameter <= 0)
+        throw std::runtime_error("Invalid dummy nozzle diameter");
+    ToolheadAssembly t;
+    t.sourceName = "Dummy toolhead";
+    t.sourceUnits = "synthetic millimetres";
+    t.components.push_back({"dummy-nozzle", "Dummy nozzle", cylinder_mesh(Vec3(0,0,1), nozzleDiameter/2, 2), Link::Nozzle, false, true});
+    t.components.push_back({"dummy-break", "Dummy heat break", cylinder_mesh(Vec3(0,0,5), 1, 6), Link::Nozzle});
+    t.components.push_back({"dummy-heater", "Dummy heater block", box_mesh(Vec3(0,0,12),Vec3(10,8,8)), Link::Nozzle});
+    t.components.push_back({"dummy-fan", "Dummy fan shroud", box_mesh(Vec3(11,0,18),Vec3(8,12,12)), Link::Nozzle});
+    t.contactRadius = std::max(.55, nozzleDiameter*.8);
+    t.contactHeight = .75;
+    return t;
+}
 Mesh box_mesh(const Vec3 &center, const Vec3 &size, const QString &name) {
     Mesh m;
     m.name = name;

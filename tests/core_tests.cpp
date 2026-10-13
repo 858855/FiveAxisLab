@@ -2,6 +2,7 @@
 #include "core/controllers.h"
 #include "core/geometry.h"
 #include "core/project.h"
+#include "core/process.h"
 #include "core/slicing.h"
 #include "core/step_import.h"
 #include "core/stress.h"
@@ -9,6 +10,9 @@
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
 #include <cmath>
+#include <map>
+#include <algorithm>
+#include <stdexcept>
 using namespace fiveaxis;
 class CoreTests : public QObject {
     Q_OBJECT
@@ -46,7 +50,129 @@ class CoreTests : public QObject {
     void conical_nozzle_contact();
     void bounded_interface();
     void fem_step_metadata();
+    void orca_process_import();
+    void process_roles_and_patterns();
+    void reduced_and_disabled_supports();
+    void dummy_toolhead_roundtrip_and_collision();
+    void toolpaths_follow_joint_motion();
 };
+void CoreTests::orca_process_import() {
+    QStringList notes;
+    auto s=import_orca_process({{"layer_height","0.2"},{"initial_layer_print_height","0.25"},
+        {"line_width","0.45"},{"outer_wall_line_width","0.5"},{"wall_loops","3"},
+        {"top_shell_layers","2"},{"bottom_shell_layers","1"},{"sparse_infill_density","35%"},
+        {"sparse_infill_pattern","grid"},{"infill_direction","45"},{"seam_position","back"},
+        {"outer_wall_speed","18"},{"travel_speed","130"},{"enable_support","0"},
+        {"wall_sequence","inner wall/outer wall"},{"tree_support_branch_angle","45"}},ProcessSettings{},notes);
+    QCOMPARE(s.layerHeight,.2); QCOMPARE(s.firstLayerHeight,.25); QCOMPARE(s.wallCount,3);
+    QCOMPARE(s.infill,.35); QCOMPARE(s.infillPattern,InfillPattern::Grid); QCOMPARE(s.seam,SeamPosition::Back);
+    QCOMPARE(s.topShellLayers,2); QCOMPARE(s.outerWallSpeed,18.0); QCOMPARE(s.travelSpeed,130.0);
+    QVERIFY(!s.supports && s.supportMode==SupportMode::None && !s.outerWallFirst);
+    QVERIFY(std::abs(s.infillAngle-pi/4)<1e-10); QVERIFY(notes.contains("Not imported: tree_support_branch_angle"));
+    QCOMPARE(process_json(read_process(process_json(s))),process_json(s));
+    QVERIFY_EXCEPTION_THROWN(import_orca_process({{"sparse_infill_pattern","gyroid"}},s,notes),std::runtime_error);
+    QVERIFY_EXCEPTION_THROWN(import_orca_process({{"sparse_infill_density","bad"}},s,notes),std::runtime_error);
+    QVERIFY_EXCEPTION_THROWN(import_orca_process({{"outer_wall_line_width","0.1"}},s,notes),std::runtime_error);
+}
+void CoreTests::process_roles_and_patterns() {
+    auto p=demo_project(); p.part=box_mesh(Vec3(0,0,1),Vec3(8,8,2));
+    p.process.layerHeight=.4; p.process.firstLayerHeight=.2; p.process.width=.6;
+    p.process.firstLayerWidth=.7; p.process.outerWallWidth=.65; p.process.innerWallWidth=.6;
+    p.process.infillWidth=.5; p.process.solidWidth=.55;
+    p.process.firstLayerSpeed=12; p.process.outerWallSpeed=19; p.process.innerWallSpeed=27;
+    p.process.infillSpeed=33; p.process.solidSpeed=21; p.process.travelSpeed=85;
+    p.process.bottomShellLayers=1; p.process.topShellLayers=1; p.process.infillPattern=InfillPattern::Grid;
+    p.process.outerWallFirst=false; p.process.supportMode=SupportMode::None;
+    slice_project(p); bool outer=false,inner=false,infill=false,solid=false,first=false;
+    Role firstExtrusion=Role::Travel;
+    for(const auto &s:p.path) {
+        if(s.deltaE<=0) { QCOMPARE(s.speed,85.0); continue; }
+        if(firstExtrusion==Role::Travel) firstExtrusion=s.role;
+        if(s.layer==0) { QCOMPARE(s.width,.7); QCOMPARE(s.height,.2); QCOMPARE(s.speed,12.0); first=true; continue; }
+        if(s.role==Role::OuterWall) { QCOMPARE(s.width,.65); QCOMPARE(s.speed,19.0); outer=true; }
+        if(s.role==Role::Wall) { QCOMPARE(s.width,.6); QCOMPARE(s.speed,27.0); inner=true; }
+        if(s.role==Role::Infill) { QCOMPARE(s.width,.5); QCOMPARE(s.speed,33.0); infill=true; }
+        if(s.role==Role::SolidInfill) { QCOMPARE(s.width,.55); QCOMPARE(s.speed,21.0); solid=true; }
+    }
+    QCOMPARE(firstExtrusion,Role::Wall); QVERIFY(first && outer && inner && infill && solid);
+    QVERIFY(p.deposition.checked);
+    auto directions=[&](InfillPattern pattern) {
+        auto q=p; q.process.infillPattern=pattern; q.process.infillAngle=pi/4; q.process.topShellLayers=q.process.bottomShellLayers=0;
+        slice_project(q); bool positive=false,negative=false;
+        for(size_t i=1;i<q.path.size();++i) if(q.path[i].role==Role::Infill && q.path[i].deltaE>0 && q.path[i].layer==0) {
+            Vec3 d=q.path[i].position-q.path[i-1].position; positive|=d.x()*d.y()>1e-6; negative|=d.x()*d.y()<-1e-6;
+        }
+        return std::make_pair(positive,negative);
+    };
+    auto grid=directions(InfillPattern::Grid), lines=directions(InfillPattern::Rectilinear);
+    QVERIFY(grid.first && grid.second); QVERIFY(lines.first && !lines.second);
+    p.process.infill=.5;
+    auto stale=validate_motion(p); QCOMPARE(stale.status,Status::Unresolved);
+    QVERIFY(stale.events.front().reason.contains("slice again"));
+}
+static Project overhang_fixture() {
+    auto p=demo_project(); p.path.clear(); p.volume={};
+    std::map<std::array<int,3>,int> ids;
+    auto id=[&](std::array<int,3> v) { auto [it,created]=ids.emplace(v,int(p.volume.vertices.size()));
+        if(created) p.volume.vertices.push_back(Vec3(v[0]-3,v[1]-2,v[2])); return it->second; };
+    for(int z=0;z<3;++z) for(int y=0;y<4;++y) for(int x=0;x<6;++x) {
+        if(z<2 && (x<2 || x>=4)) continue;
+        std::array<int,3> axes={0,1,2};
+        do { std::array<int,3> v={x,y,z}; std::vector<int> n={id(v)};
+            for(int axis:axes) { ++v[axis]; n.push_back(id(v)); }
+            p.volume.cells.push_back({n});
+        } while(std::next_permutation(axes.begin(),axes.end()));
+    }
+    p.part=volume_surface(p.volume); p.process.layerHeight=.5; p.process.width=.6;
+    p.process.wallCount=1; p.process.infill=.4; p.process.maximumBridge=.4;
+    return p;
+}
+void CoreTests::reduced_and_disabled_supports() {
+    auto normal=overhang_fixture(),reduced=normal,none=normal;
+    reduced.process.supportMode=SupportMode::Reduced; reduced.process.supportReduction=2;
+    none.process.supportMode=SupportMode::None;
+    slice_project(normal); slice_project(reduced); slice_project(none);
+    auto amount=[](const Project &p) { double volume=0; for(const auto &s:p.path) if(s.role==Role::Support) volume+=std::max(0.0,s.deltaE); return volume; };
+    QVERIFY(amount(normal)>0); QVERIFY(amount(reduced)>0); QVERIFY(amount(reduced)<amount(normal));
+    QCOMPARE(amount(none),0.0); QVERIFY(!none.deposition.unsupportedMoves.empty()); QVERIFY(!none.depositionValid);
+    none.report=validate_motion(none); QVERIFY(!none.report.exportable());
+    QVERIFY_EXCEPTION_THROWN(export_gcode(none),std::runtime_error);
+}
+void CoreTests::dummy_toolhead_roundtrip_and_collision() {
+    QTemporaryDir dir; write_demo_step(dir.filePath("head.step"));
+    auto p=demo_project(); p.toolhead=load_step_assembly(dir.filePath("head.step"));
+    auto cadHash=p.toolhead.sourceHash; auto cad=p.toolhead.sourceStep;
+    p.dummyToolhead=make_dummy_toolhead(.8); p.dummyToolhead.contactHeight=.5;
+    p.process.supportMode=SupportMode::Reduced; p.process.outerWallSpeed=16;
+    p.useDummyToolhead=true;
+    auto file=dir.filePath("dummy.5axis"); save_project(p,file); auto q=load_project(file);
+    QVERIFY(q.useDummyToolhead); QCOMPARE(q.toolhead.sourceHash,cadHash); QCOMPARE(q.toolhead.sourceStep,cad);
+    QCOMPARE(q.fingerprint(),p.fingerprint()); QCOMPARE(q.active_toolhead().components.size(),size_t(4));
+    QCOMPARE(q.process.outerWallSpeed,16.0); QCOMPARE(q.process.supportMode,SupportMode::Reduced);
+    q.fixtures.push_back({"Dummy heater obstacle",box_mesh(Vec3(0,0,22),Vec3(2,2,2)),false});
+    CollisionScene scene(q); JointState pose; pose.xyz=Vec3(0,0,10);
+    auto report=scene.check_pose(pose,false,pose.xyz); QCOMPARE(report.status,Status::Collision);
+    auto fingerprint=q.fingerprint(); q.useDummyToolhead=false; QVERIFY(q.fingerprint()!=fingerprint);
+    QCOMPARE(q.active_toolhead().sourceHash,cadHash);
+    auto legacy=project_json(p); legacy.remove("dummyToolhead"); legacy.remove("useDummyToolhead");
+    legacy["process"]=QJsonObject{{"layerHeight",.5},{"width",.8},{"supports",false}};
+    auto old=project_from_json(legacy); QVERIFY(!old.useDummyToolhead); QVERIFY(!old.process.supports);
+}
+void CoreTests::toolpaths_follow_joint_motion() {
+    Project p; Sample a,b; a.joint.xyz=Vec3(10,0,5); a.position=part_position(p.machine,a.joint);
+    b=a; b.joint.b=pi/2; b.position=part_position(p.machine,b.joint); b.time=1; b.layer=4;
+    p.path={a,b}; auto segments=simulation_toolpaths(p); QVERIFY(segments.size()>10);
+    QVERIFY((segments.front().start-a.position).norm()<1e-10); QVERIFY((segments.back().end-b.position).norm()<1e-10);
+    bool curved=false;
+    for(auto &s:segments) { QCOMPARE(s.role,Role::Travel); QCOMPARE(s.layer,4); QCOMPARE(s.move,1);
+        Vec3 actual=part_position(p.machine,interpolate_motion(p.machine,p.active_toolhead(),a.joint,b.joint,(s.begin+s.finish)/2));
+        QVERIFY((actual-(s.start+s.end)/2).norm()<=p.machine.chordTolerance);
+        curved|=(s.start-(a.position+(b.position-a.position)*s.begin)).norm()>.1;
+    }
+    QVERIFY(curved); auto late=simulation_at(p,.8),early=simulation_at(p,.2),again=simulation_at(p,.8);
+    QVERIFY((late.joint.xyz-again.joint.xyz).norm()<1e-10); QVERIFY(early.fraction<late.fraction);
+    auto repeated=simulation_toolpaths(p); QCOMPARE(repeated.size(),segments.size());
+}
 static Project small() {
     Project p;
     p.machine.clearance = .05;

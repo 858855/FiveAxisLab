@@ -51,9 +51,9 @@ def main():
                                '--gcode',str(EXAMPLES/'reference-klipper.gcode'),'--profile',str(EXAMPLES/'reference-klipper.5machine')]),
            ('reference-head',['--demo',str(EXAMPLES/'reference-head.5axis'),'--head','--replay',
                               '--profile',str(EXAMPLES/'reference-head.5machine')]),
-           ('curved-stress',['--slice',str(EXAMPLES/'geometry/stress-block.obj'),'--fem',str(EXAMPLES/'geometry/stress-tensor.vtu'),
+           ('curved-stress',['--slice',str(EXAMPLES/'geometry/stress-block.obj'),'--dummy-toolhead','--fem',str(EXAMPLES/'geometry/stress-tensor.vtu'),
                              '--stress-array','stress','--output',str(EXAMPLES/'curved-stress.5axis')]),
-           ('torus',['--slice',str(EXAMPLES/'geometry/torus.obj'),'--output',str(EXAMPLES/'torus.5axis')])]
+           ('torus',['--slice',str(EXAMPLES/'geometry/torus.obj'),'--dummy-toolhead','--output',str(EXAMPLES/'torus.5axis')])]
     def run(case):
         name,options=case
         start=time.monotonic();log=reportDir/(name+'.log')

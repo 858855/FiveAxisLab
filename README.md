@@ -1,12 +1,14 @@
-# FiveAxisLab 0.1.0
+# FiveAxisLab 0.2.0
 
 Independent C++17 / Qt 6 / OpenGL research application for five-axis FFF. Windows x64 portable build, shared headless core, AGPL-3.0-or-later. This is an initial research implementation, with remaining qualification work recorded in [docs/VALIDATION.md](docs/VALIDATION.md).
 
 ## Run
 
-Extract the locally packaged `dist/FiveAxisLab-0.1.0-win64.zip` and run `FiveAxisLab.exe`. No SDK or Python is needed to run the packaged desktop app. The portable folder also contains `fiveaxis_cli.exe`, example projects, CAD fixtures, controller integration, dependency notices and validation reports. Binary packages and the SDK are excluded from Git; a fresh clone can produce them using the build instructions below.
+Extract the locally packaged `dist/FiveAxisLab-0.2.0-win64.zip` and run `FiveAxisLab.exe`. No SDK or Python is needed to run the packaged desktop app. The portable folder also contains `fiveaxis_cli.exe`, example projects, CAD fixtures, controller integration, dependency notices and validation reports. Binary packages and the SDK are excluded from Git; a fresh clone can produce them using the build instructions below.
 
-![Windows simulation preview](examples/reports/portable-preview.png)
+![Windows simulation with toolpaths](examples/reports/toolpaths-preview.png)
+
+Version 0.2 adds **Toolpaths → Full job / Up to nozzle / Current layer**, travel and deposited-material visibility controls, and role colors for outer walls, inner walls, infill, solid fill and supports. **Generate with dummy toolhead** uses synthetic collision geometry while retaining the imported STEP assembly. **Process settings · Orca options** exposes widths, wall order, shell layers, infill patterns, seam placement, speeds and Z hop. Select **Normal / Reduced / No supports**; unsupported deposition remains checked. [Supported controls and Orca preset import](docs/PROCESS_SETTINGS.md).
 
 The initial screen contains a synthetic machine and demonstration job. Open `examples/reference-bed.5axis` for a checked trajectory, `examples/head-sync.5axis` for compensated head motion, or `examples/curved-stress.5axis` for an unvalidated directional-stress slicing example. The larger curved example exceeds the current validation benchmark's runtime budget and remains blocked. These are synthetic fixtures, not a calibrated printer.
 
@@ -54,6 +56,7 @@ Native Klipper batch testing uses WSL/Linux with GCC, Make, Python and the pinne
 ./fiveaxis_cli.exe --slice part.stl --toolhead toolhead.step --output sliced.5axis --report report.json
 ./fiveaxis_cli.exe --validate reference.5axis --klipper --replay --gcode klipper.gcode
 ./fiveaxis_cli.exe --validate reference.5axis --head --profile head.5machine
+./fiveaxis_cli.exe --slice part.stl --dummy-toolhead --orca-process process.json --supports reduced --output preview.5axis --plan-only
 ```
 
 Exit 0 means the selected motion passes configured geometry checks; 2 means collision / unresolved; 1 means input or operation failure. Export is blocked independently when deposition planning is incomplete. Source-CAD hashes, collision tolerances, settings, FEM, placements, machine bodies, paths and reports round-trip in a `.5axis` ZIP project.

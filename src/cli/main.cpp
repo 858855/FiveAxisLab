@@ -2,6 +2,7 @@
 #include "core/controllers.h"
 #include "core/geometry.h"
 #include "core/project.h"
+#include "core/process.h"
 #include "core/slicing.h"
 #include "core/step_import.h"
 #include "core/stress.h"
@@ -29,6 +30,10 @@ int main(int argc, char **argv) {
     parser.addOption({"klipper", "Use Klipper output"});
     parser.addOption({"repair", "Attempt collision avoidance"});
     parser.addOption({"toolhead", "Import and use a STEP toolhead with zero CAD TCP", "file"});
+    parser.addOption({"dummy-toolhead", "Generate with synthetic toolhead geometry instead of requiring STEP"});
+    parser.addOption({"orca-process", "Import supported settings from an Orca process JSON preset", "file"});
+    parser.addOption({"supports", "Support generation: normal, reduced, or none", "mode"});
+    parser.addOption({"maximum-bridge", "Maximum span used by the deposition support heuristic", "mm"});
     parser.addOption({"fem", "Import a complete tensor or scalar VTU file", "file"});
     parser.addOption({"stress-array", "Select the VTU array", "name"});
     parser.addOption({"stock-klipper", "Disable the optional flow extension"});
@@ -39,6 +44,7 @@ int main(int argc, char **argv) {
     parser.process(app);
     try {
         Project p = demo_project();
+        QStringList presetNotes;
         if (parser.isSet("head-motion")) {
             p = Project{};
             p.machine.layout = Layout::TiltingHead;
@@ -68,6 +74,30 @@ int main(int argc, char **argv) {
         }
         if (parser.isSet("validate"))
             p = load_project(parser.value("validate"));
+        if(parser.isSet("slice")) {
+            p.process.layerHeight=.4; p.process.width=.6;
+            p.useDummyToolhead=false;
+        }
+        if(parser.isSet("orca-process")) {
+            QFile file(parser.value("orca-process"));
+            if(!file.open(QIODevice::ReadOnly)) throw std::runtime_error("Cannot open Orca process JSON");
+            QJsonParseError error; auto doc=QJsonDocument::fromJson(file.readAll(),&error);
+            if(error.error!=QJsonParseError::NoError || !doc.isObject()) throw std::runtime_error("Invalid Orca process JSON");
+            p.process=import_orca_process(doc.object(),p.process,presetNotes);
+        }
+        if(parser.isSet("supports")) {
+            auto value=parser.value("supports");
+            if(value=="normal") p.process.supportMode=SupportMode::Normal;
+            else if(value=="reduced") p.process.supportMode=SupportMode::Reduced;
+            else if(value=="none") p.process.supportMode=SupportMode::None;
+            else throw std::runtime_error("Supports must be normal, reduced, or none");
+            p.process.supports=p.process.supportMode!=SupportMode::None;
+        }
+        if(parser.isSet("maximum-bridge")) {
+            bool ok=false; p.process.maximumBridge=parser.value("maximum-bridge").toDouble(&ok);
+            if(!ok || !std::isfinite(p.process.maximumBridge) || p.process.maximumBridge<0)
+                throw std::runtime_error("Invalid maximum bridge span");
+        }
         if (parser.isSet("head")) {
             p.machine.layout = Layout::TiltingHead;
             p.machine.minB = -75 * pi / 180;
@@ -78,8 +108,18 @@ int main(int argc, char **argv) {
             p.machine.controller = Controller::Klipper;
         if (parser.isSet("stock-klipper"))
             p.machine.klipperExtension = false;
-        if (parser.isSet("toolhead"))
+        if(parser.isSet("toolhead") && parser.isSet("dummy-toolhead"))
+            throw std::runtime_error("Choose either a STEP toolhead or --dummy-toolhead");
+        if (parser.isSet("toolhead")) {
             p.toolhead = load_step_assembly(parser.value("toolhead"));
+            p.useDummyToolhead=false;
+        }
+        if(parser.isSet("dummy-toolhead")) {
+            p.dummyToolhead=make_dummy_toolhead(p.process.nozzleDiameter);
+            p.useDummyToolhead=true;
+        }
+        if(!parser.isSet("slice") && (parser.isSet("dummy-toolhead") || parser.isSet("toolhead")))
+            regenerate_joints(p);
         if (parser.isSet("slice")) {
             p.part = load_mesh(parser.value("slice"));
             Vec3 shift = p.part.bounds().center();
@@ -87,8 +127,6 @@ int main(int argc, char **argv) {
             for (auto &v : p.part.vertices)
                 v -= shift;
             p.partPlacement = translation(-shift);
-            p.process.layerHeight = .4;
-            p.process.width = .6;
             if (parser.isSet("fem")) {
                 VtuOptions options;
                 options.array = parser.value("stress-array");
@@ -97,6 +135,7 @@ int main(int argc, char **argv) {
             }
             slice_project(p);
         }
+        p.diagnostics.append(presetNotes);
         int progress = 0;
         if (!p.deposition.checked)
             check_deposition(p);
@@ -121,6 +160,8 @@ int main(int argc, char **argv) {
             Project profile;
             profile.machine = p.machine;
             profile.toolhead = p.toolhead;
+            profile.dummyToolhead = p.dummyToolhead;
+            profile.useDummyToolhead = p.useDummyToolhead;
             profile.fixtures = p.fixtures;
             save_project(profile, parser.value("profile"));
         }
@@ -134,6 +175,7 @@ int main(int argc, char **argv) {
         }
         auto report = project_json(p)["report"].toObject();
         report["physicalPrintingValidated"] = false;
+        report["dummyToolhead"] = p.useDummyToolhead;
         report["nativeFirmwareValidated"] = false;
         report["controllerSemanticReplayValidated"] = replayVerified;
         report["deposition"] = project_json(p)["deposition"];

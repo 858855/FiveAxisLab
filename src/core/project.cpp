@@ -1,5 +1,6 @@
 #include "project.h"
 #include "geometry.h"
+#include "process.h"
 #include <QCryptographicHash>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -106,6 +107,73 @@ static JointState read_joint(const QJsonObject &o) {
     q.b = o["b"].toDouble();
     return q;
 }
+static QJsonObject tool_json(const ToolheadAssembly &tool) {
+    QJsonArray components;
+    for (auto &c : tool.components)
+        components.append(QJsonObject{{"id", c.id},
+                                      {"name", c.name},
+                                      {"mesh", mesh_json(c.mesh)},
+                                      {"link", int(c.link)},
+                                      {"visualOnly", c.visualOnly},
+                                      {"nozzle", c.nozzle},
+                                      {"renderMesh", mesh_json(c.renderMesh)},
+                                      {"assemblyPlacement", matrix(c.assemblyPlacement)}});
+    QJsonArray interfaces;
+    for (const auto &a : tool.interfaces)
+        interfaces.append(QJsonObject{
+            {"first", a.first}, {"second", a.second}, {"center", vec(a.center)}, {"size", vec(a.size)}});
+    return QJsonObject{{"sourceName", tool.sourceName},
+                     {"interfaces", interfaces},
+                     {"sourceUnits", tool.sourceUnits},
+                     {"sourceHash", tool.sourceHash},
+                     {"mount", matrix(tool.mount)},
+                     {"tcp", vec(tool.tcp)},
+                     {"axis", vec(tool.axis)},
+                     {"contactRadius", tool.contactRadius},
+                     {"contactHeight", tool.contactHeight},
+                     {"components", components}};
+}
+static ToolheadAssembly read_toolhead(const QJsonObject &t) {
+    ToolheadAssembly tool;
+    if (t.isEmpty()) return tool;
+    tool.sourceName = t["sourceName"].toString();
+    tool.sourceUnits = t["sourceUnits"].toString();
+    for (auto item : t["interfaces"].toArray()) {
+        auto a = item.toObject();
+        ToolheadAssembly::InterfaceAllowance rule;
+        rule.first = a["first"].toString();
+        rule.second = a["second"].toString();
+        rule.center = vec(a["center"]);
+        rule.size = vec(a["size"]);
+        if (rule.size.minCoeff() <= 0)
+            throw std::runtime_error("Invalid interface box");
+        tool.interfaces.push_back(rule);
+    }
+    tool.sourceHash = t["sourceHash"].toString();
+    tool.mount = transform(t["mount"]);
+    tool.tcp = vec(t["tcp"]);
+    tool.axis = vec(t["axis"]);
+    tool.contactRadius = t["contactRadius"].toDouble(.55);
+    tool.contactHeight = t["contactHeight"].toDouble(.75);
+    if (tool.axis.norm() < 1e-6)
+        throw std::runtime_error("Invalid nozzle axis");
+    for (auto x : t["components"].toArray()) {
+        auto c = x.toObject();
+        Component a;
+        a.id = c["id"].toString();
+        a.name = c["name"].toString();
+        a.mesh = read_mesh(c["mesh"].toObject());
+        a.link = Link(c["link"].toInt());
+        a.visualOnly = c["visualOnly"].toBool();
+        a.nozzle = c["nozzle"].toBool();
+        if (c.contains("renderMesh"))
+            a.renderMesh = read_mesh(c["renderMesh"].toObject());
+        if (c.contains("assemblyPlacement"))
+            a.assemblyPlacement = transform(c["assemblyPlacement"]);
+        tool.components.push_back(a);
+    }
+    return tool;
+}
 QJsonObject project_json(const Project &p) {
     QJsonObject m{{"layout", int(p.machine.layout)},
                   {"controller", int(p.machine.controller)},
@@ -130,26 +198,8 @@ QJsonObject project_json(const Project &p) {
                   {"klipperExtension", p.machine.klipperExtension},
                   {"stockExtrusionRatio", p.machine.stockExtrusionRatio},
                   {"klipperRevision", p.machine.klipperRevision}};
-    QJsonObject s{{"layerHeight", p.process.layerHeight},
-                  {"width", p.process.width},
-                  {"infill", p.process.infill},
-                  {"speed", p.process.speed},
-                  {"directionCone", p.process.directionCone},
-                  {"maximumTilt", p.process.maximumTilt},
-                  {"curved", p.process.curved},
-                  {"supports", p.process.supports},
-                  {"wallCount", p.process.wallCount},
-                  {"maximumBridge", p.process.maximumBridge}};
+    QJsonObject s = process_json(p.process);
     QJsonArray components, fixtures, path, tensors, scalar, fixed, forces, events, modeled;
-    for (auto &c : p.toolhead.components)
-        components.append(QJsonObject{{"id", c.id},
-                                      {"name", c.name},
-                                      {"mesh", mesh_json(c.mesh)},
-                                      {"link", int(c.link)},
-                                      {"visualOnly", c.visualOnly},
-                                      {"nozzle", c.nozzle},
-                                      {"renderMesh", mesh_json(c.renderMesh)},
-                                      {"assemblyPlacement", matrix(c.assemblyPlacement)}});
     for (auto &f : p.fixtures)
         fixtures.append(QJsonObject{{"name", f.name},
                                     {"mesh", mesh_json(f.mesh)},
@@ -191,20 +241,7 @@ QJsonObject project_json(const Project &p) {
                                   {"contact", vec(e.contact)}});
     for (auto &c : p.report.modeledComponents)
         modeled.append(c);
-    QJsonArray interfaces;
-    for (const auto &a : p.toolhead.interfaces)
-        interfaces.append(QJsonObject{
-            {"first", a.first}, {"second", a.second}, {"center", vec(a.center)}, {"size", vec(a.size)}});
-    QJsonObject tool{{"sourceName", p.toolhead.sourceName},
-                     {"interfaces", interfaces},
-                     {"sourceUnits", p.toolhead.sourceUnits},
-                     {"sourceHash", p.toolhead.sourceHash},
-                     {"mount", matrix(p.toolhead.mount)},
-                     {"tcp", vec(p.toolhead.tcp)},
-                     {"axis", vec(p.toolhead.axis)},
-                     {"contactRadius", p.toolhead.contactRadius},
-                     {"contactHeight", p.toolhead.contactHeight},
-                     {"components", components}};
+    auto tool = tool_json(p.toolhead);
     QJsonObject stress{{"mesh", volume_json(p.stress.mesh)},
                        {"tensors", tensors},
                        {"scalar", scalar},
@@ -237,12 +274,14 @@ QJsonObject project_json(const Project &p) {
                            {"unsupported", unsupported},
                            {"dependencies", dependencies}};
     return {{"schema", 1},
-            {"engineRevision", "0.1.0-carriage-axes-2"},
+            {"engineRevision", "0.2.0-process-toolpaths-2"},
             {"deposition", deposition},
             {"part", mesh_json(p.part)},
             {"partPlacement", matrix(p.partPlacement)},
             {"volume", volume_json(p.volume)},
             {"toolhead", tool},
+            {"dummyToolhead", tool_json(p.dummyToolhead)},
+            {"useDummyToolhead", p.useDummyToolhead},
             {"machine", m},
             {"process", s},
             {"stress", stress},
@@ -250,6 +289,7 @@ QJsonObject project_json(const Project &p) {
             {"comparison", comparison},
             {"fixtures", fixtures},
             {"path", path},
+            {"pathProcessFingerprint", p.pathProcessFingerprint.isEmpty() ? process_fingerprint(p.process) : p.pathProcessFingerprint},
             {"report", report},
             {"diagnostics", QJsonArray::fromStringList(p.diagnostics)},
             {"depositionValid", p.depositionValid}};
@@ -305,54 +345,12 @@ Project project_from_json(const QJsonObject &j) {
         p.machine.angularAccel <= 0 || p.machine.clearance < 0 || p.machine.filamentDiameter <= 0 ||
         p.machine.maxFlow <= 0)
         throw std::runtime_error("Invalid machine configuration");
-    auto s = j["process"].toObject();
-    p.process.layerHeight = s["layerHeight"].toDouble(.2);
-    p.process.width = s["width"].toDouble(.45);
-    p.process.infill = s["infill"].toDouble(.25);
-    p.process.speed = s["speed"].toDouble(25);
-    p.process.directionCone = s["directionCone"].toDouble();
-    p.process.maximumTilt = s["maximumTilt"].toDouble(65 * pi / 180);
-    p.process.curved = s["curved"].toBool();
-    p.process.supports = s["supports"].toBool();
-    p.process.wallCount = s["wallCount"].toInt(2);
-    p.process.maximumBridge = s["maximumBridge"].toDouble(5);
-    auto t = j["toolhead"].toObject();
-    p.toolhead.sourceName = t["sourceName"].toString();
-    p.toolhead.sourceUnits = t["sourceUnits"].toString();
-    for (auto item : t["interfaces"].toArray()) {
-        auto a = item.toObject();
-        ToolheadAssembly::InterfaceAllowance rule;
-        rule.first = a["first"].toString();
-        rule.second = a["second"].toString();
-        rule.center = vec(a["center"]);
-        rule.size = vec(a["size"]);
-        if (rule.size.minCoeff() <= 0)
-            throw std::runtime_error("Invalid interface box");
-        p.toolhead.interfaces.push_back(rule);
-    }
-    p.toolhead.sourceHash = t["sourceHash"].toString();
-    p.toolhead.mount = transform(t["mount"]);
-    p.toolhead.tcp = vec(t["tcp"]);
-    p.toolhead.axis = vec(t["axis"]);
-    p.toolhead.contactRadius = t["contactRadius"].toDouble(.55);
-    p.toolhead.contactHeight = t["contactHeight"].toDouble(.75);
-    if (p.toolhead.axis.norm() < 1e-6)
-        throw std::runtime_error("Invalid nozzle axis");
-    for (auto x : t["components"].toArray()) {
-        auto c = x.toObject();
-        Component a;
-        a.id = c["id"].toString();
-        a.name = c["name"].toString();
-        a.mesh = read_mesh(c["mesh"].toObject());
-        a.link = Link(c["link"].toInt());
-        a.visualOnly = c["visualOnly"].toBool();
-        a.nozzle = c["nozzle"].toBool();
-        if (c.contains("renderMesh"))
-            a.renderMesh = read_mesh(c["renderMesh"].toObject());
-        if (c.contains("assemblyPlacement"))
-            a.assemblyPlacement = transform(c["assemblyPlacement"]);
-        p.toolhead.components.push_back(a);
-    }
+    p.process = read_process(j["process"].toObject());
+    p.pathProcessFingerprint = j["pathProcessFingerprint"].toString(process_fingerprint(p.process));
+    p.toolhead = read_toolhead(j["toolhead"].toObject());
+    p.useDummyToolhead = j["useDummyToolhead"].toBool();
+    p.dummyToolhead = j.contains("dummyToolhead") ? read_toolhead(j["dummyToolhead"].toObject()) :
+                         make_dummy_toolhead(p.process.nozzleDiameter);
     for (auto x : j["fixtures"].toArray()) {
         auto a = x.toObject();
         p.fixtures.push_back({a["name"].toString(), read_mesh(a["mesh"].toObject()),
@@ -508,12 +506,17 @@ Project demo_project() {
     p.toolhead.components.push_back({"fan", "Fan shroud",
                                      box_mesh(Vec3(11, 0, 18), Vec3(8, 12, 12), "Fan shroud"), Link::Nozzle,
                                      false, false});
+    p.dummyToolhead = std::move(p.toolhead);
+    p.dummyToolhead.sourceName = "Dummy demonstration toolhead";
+    p.dummyToolhead.sourceUnits = "synthetic millimetres";
+    p.useDummyToolhead = true;
+    p.process.nozzleDiameter = .8;
     p.process.layerHeight = .5;
     p.process.width = .8;
     p.process.infill = .25;
     p.machine.clearance = .25;
-    p.toolhead.contactHeight = .5;
-    p.toolhead.contactRadius = .65;
+    p.dummyToolhead.contactHeight = .5;
+    p.dummyToolhead.contactRadius = .65;
     Sample start;
     start.position = Vec3(-9, -9, 10);
     start.joint.xyz = start.position;

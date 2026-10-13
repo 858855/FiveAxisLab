@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(FiveAxisLab VERSION 0.1.0 LANGUAGES C CXX)
+project(FiveAxisLab VERSION 0.2.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Compatibility for pinned upstream releases")
@@ -39,7 +39,7 @@ find_library(TETGEN_LIBRARY NAMES tet tetgen REQUIRED)
 add_library(fiveaxis_core STATIC
  src/core/types.cpp src/core/geometry.cpp src/core/step_import.cpp
  src/core/stress.cpp src/core/slicing.cpp src/core/collision.cpp
- src/core/controllers.cpp src/core/project.cpp src/core/orca_adapter.cpp)
+ src/core/controllers.cpp src/core/project.cpp src/core/orca_adapter.cpp src/core/process.cpp)
 target_include_directories(fiveaxis_core PUBLIC src ${OpenCASCADE_INCLUDE_DIR} vendor/fcl/include
  "${CMAKE_CURRENT_BINARY_DIR}/vendor/fcl/include" vendor/ompl/src "${CMAKE_CURRENT_BINARY_DIR}/vendor/ompl/src")
 target_link_libraries(fiveaxis_core PUBLIC Qt6::Core Eigen3::Eigen fcl ompl PRIVATE
@@ -56,7 +56,7 @@ if(MSVC)
 else()
  target_compile_options(fiveaxis_core PRIVATE -Wall -Wextra -Wno-deprecated-declarations)
 endif()
-add_executable(FiveAxisLab WIN32 src/app/main.cpp src/app/main_window.cpp src/app/viewport.cpp)
+add_executable(FiveAxisLab WIN32 src/app/main.cpp src/app/main_window.cpp src/app/process_dialog.cpp src/app/viewport.cpp)
 target_link_libraries(FiveAxisLab PRIVATE fiveaxis_core Qt6::Widgets Qt6::OpenGLWidgets Qt6::Concurrent)
 add_executable(fiveaxis_cli src/cli/main.cpp)
 target_link_libraries(fiveaxis_cli PRIVATE fiveaxis_core)
@@ -64,7 +64,7 @@ enable_testing()
 add_executable(core_tests tests/core_tests.cpp)
 target_link_libraries(core_tests PRIVATE fiveaxis_core Qt6::Test)
 add_test(NAME core COMMAND core_tests)
-add_executable(desktop_tests tests/desktop_tests.cpp src/app/main_window.cpp src/app/viewport.cpp)
+add_executable(desktop_tests tests/desktop_tests.cpp src/app/main_window.cpp src/app/process_dialog.cpp src/app/viewport.cpp)
 target_link_libraries(desktop_tests PRIVATE fiveaxis_core Qt6::Test Qt6::Widgets Qt6::OpenGLWidgets Qt6::Concurrent)
 add_test(NAME desktop COMMAND desktop_tests)
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/tmp")

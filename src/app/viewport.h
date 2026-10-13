@@ -17,6 +17,11 @@ class Viewport : public QOpenGLWidget, protected QOpenGLFunctions {
     void set_project(const fiveaxis::Project *p);
     void set_time(double t);
     void set_stress(bool v);
+    void set_path_mode(int mode) { pathMode = mode; update_path_legend(); update(); }
+    void set_travel_paths(bool value) { travelPaths = value; update_path_legend(); update(); }
+    void set_deposited_visible(bool value) { depositedVisible = value; update(); }
+    int path_mode() const { return pathMode; }
+    size_t toolpath_segment_count() const { return pathSegments.size(); }
     void set_follow(bool v) {
         follow = v;
         update();
@@ -53,6 +58,12 @@ class Viewport : public QOpenGLWidget, protected QOpenGLFunctions {
     bool follow = false, transparent = true, pickTool = false;
     bool stressVisible = false;
     bool validationCurrent = false;
+    int pathMode = 0;
+    bool travelPaths = true, depositedVisible = true;
+    std::vector<fiveaxis::ToolpathSegment> pathSegments;
+    QOpenGLBuffer pathBuffer;
+    bool pathsUploaded = false;
+    std::map<int, std::vector<std::pair<int,int>>> layerRanges;
     double fieldMin = 0, fieldMax = 1;
     std::set<int> fixed, loaded;
     QMatrix4x4 view_projection() const;
@@ -64,6 +75,8 @@ class Viewport : public QOpenGLWidget, protected QOpenGLFunctions {
     fiveaxis::Mesh beads, unitBox, fixedMesh, loadedMesh, marker;
     std::vector<int> beadEnds;
     void draw_mesh(const fiveaxis::Mesh &, const fiveaxis::Transform &, QVector4D, int triangles = -1);
+    void draw_paths(const fiveaxis::Transform &);
     void pick(QPoint);
-    QLabel *hud;
+    QLabel *hud, *pathLegend;
+    void update_path_legend();
 };

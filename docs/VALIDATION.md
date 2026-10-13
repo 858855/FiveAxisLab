@@ -1,5 +1,9 @@
 # Validation ledger
 
+Version 0.2 adds five core regression cases and a second native desktop workflow: Orca JSON parsing and rejection, real generation effects of widths / heights / speeds / patterns / shell counts / wall order, support reduction and no-support export blocking, dummy geometry and preserved STEP project round trips, actual joint-interpolated preview paths, and native path visibility / dummy / process controls. Current evidence is stored under `examples/reports/0.2.0-*`. The counts and larger benchmarks below are archived evidence from 0.1; native firmware and physical qualification are not extended by the new preview controls.
+
+Version 0.2 checks passed: 38 core cases, two native desktop workflows and eight Python flow cases. The synthetic T-overhang example uses 19.04 mm³ support in normal mode, 4.95 mm³ in reduced mode and zero with supports disabled. It still flags 13, 55 and 144 deposition violations respectively under the conservative 0.4 mm bridge setting. These saved projects are unvalidated planned previews with blocked export; support reduction is not a certification of printability. See `0.2.0-features.json` for the measurements.
+
 This document distinguishes core / geometric checks, controller interpretation and physical evidence. Individual results and durations are stored in `examples/reports/` after the release checks. No physical print or real machine calibration has been performed.
 
 | Area | Evidence implemented | Qualification boundary |

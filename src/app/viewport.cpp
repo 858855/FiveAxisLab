@@ -25,6 +25,12 @@ Viewport::Viewport(QWidget *parent) : QOpenGLWidget(parent) {
     hud->setAttribute(Qt::WA_TransparentForMouseEvents);
     hud->setStyleSheet("background:transparent;color:#c6d9eb;font-size:12px;padding:0;");
     hud->move(24, 20);
+    pathLegend = new QLabel(this);
+    pathLegend->setAttribute(Qt::WA_TransparentForMouseEvents);
+    pathLegend->setStyleSheet("background:transparent;font-size:12px;");
+    pathLegend->setTextFormat(Qt::RichText);
+    pathLegend->setWordWrap(true);
+    update_path_legend();
     unitBox = box_mesh(Vec3::Zero(), Vec3::Ones());
     marker = box_mesh(Vec3::Zero(), Vec3(.7, .7, .7));
 }
@@ -32,6 +38,7 @@ Viewport::~Viewport() {
     if (isValid())
         makeCurrent();
     cache.clear();
+    pathBuffer.destroy();
     if (isValid())
         doneCurrent();
 }
@@ -39,9 +46,18 @@ void Viewport::set_project(const Project *p) {
     if (isValid())
         makeCurrent();
     cache.clear();
+    pathBuffer.destroy();
+    pathsUploaded=false;
     if (isValid())
         doneCurrent();
     project = p;
+    pathSegments = p ? simulation_toolpaths(*p) : std::vector<ToolpathSegment>{};
+    layerRanges.clear();
+    for(size_t i=0;i<pathSegments.size();) {
+        size_t end=i+1;
+        while(end<pathSegments.size() && pathSegments[end].layer==pathSegments[i].layer) ++end;
+        layerRanges[pathSegments[i].layer].push_back({int(i),int(end)}); i=end;
+    }
     validationCurrent = p && p->report.exportable() && p->report.fingerprint == p->fingerprint();
     fieldMin = 1e100;
     fieldMax = -1e100;
@@ -99,7 +115,7 @@ void Viewport::set_time(double t) {
     if (project)
         state = simulation_at(*project, t, false);
     if (project) {
-        auto axes = controller_axes(project->machine, project->toolhead, state.joint);
+        auto axes = controller_axes(project->machine, project->active_toolhead(), state.joint);
         double flow = 0;
         if (state.move > 0 && state.move < int(project->path.size())) {
             auto &b = project->path[state.move];
@@ -127,6 +143,9 @@ void Viewport::set_time(double t) {
                               : project->report.status == Status::Collision
                                   ? "Collision detected · export blocked"
                                   : "Validation pending / unresolved"));
+        if(project->useDummyToolhead) hud->setText(hud->text()+"\nDUMMY TOOLHEAD · synthetic geometry only");
+        if(project->deposition.checked && !project->deposition.unsupportedMoves.empty())
+            hud->setText(hud->text()+QString("\n%1 deposition violations · marked red").arg(project->deposition.unsupportedMoves.size()));
         hud->adjustSize();
         hud->raise();
     }
@@ -168,8 +187,8 @@ void Viewport::fit() {
     if (!project)
         return;
     Eigen::AlignedBox3d b = project->part.bounds();
-    for (auto &c : project->toolhead.components) {
-        auto pose=component_pose(project->machine,project->toolhead,c,state.joint);
+    for (auto &c : project->active_toolhead().components) {
+        auto pose=component_pose(project->machine,project->active_toolhead(),c,state.joint);
         for(auto& v:c.mesh.vertices)b.extend(pose*v);
     }
     if (!b.isEmpty()) {
@@ -201,13 +220,26 @@ void Viewport::initializeGL() {
         "main(){gl_Position=mvp*vec4(position,1.0);N=mat3(model)*normal;C=fieldColor;}");
     shader.addShaderFromSourceCode(
         QOpenGLShader::Fragment,
-        "uniform vec4 color;uniform float useField;varying vec3 N;varying vec3 C;void main(){float "
+        "uniform vec4 color;uniform float useField;uniform float unlit;varying vec3 N;varying vec3 C;void main(){float "
         "light=0.38+0.62*abs(dot(normalize(N),normalize(vec3(-0.5,-0.3,1.0))));gl_"
-        "FragColor=vec4(mix(color.rgb,C,useField)*light,color.a);}");
+        "FragColor=vec4(mix(color.rgb,C,useField)*mix(light,1.0,unlit),color.a);}");
     shader.link();
 }
 void Viewport::resizeGL(int w, int h) {
     glViewport(0, 0, w, h);
+    update_path_legend();
+}
+void Viewport::update_path_legend() {
+    pathLegend->setVisible(pathMode!=3);
+    QString text="<span style='color:#ffb454'>Outer wall</span>&nbsp;&nbsp; "
+                 "<span style='color:#efdf70'>Inner wall</span>&nbsp;&nbsp; "
+                 "<span style='color:#35d4b0'>Infill</span>&nbsp;&nbsp; "
+                 "<span style='color:#70e0ee'>Solid</span>&nbsp;&nbsp; "
+                 "<span style='color:#d391f0'>Support</span>";
+    if(travelPaths) text+="&nbsp;&nbsp; <span style='color:#72aafa'>Travel</span>";
+    pathLegend->setText(text+"&nbsp;&nbsp; <span style='color:#ff586b'>Conflict</span><br/><span style='color:#a7b8ca'>Future motion dimmed · Current segment white</span>");
+    pathLegend->setFixedWidth(std::max(100,width()-48)); pathLegend->adjustSize();
+    pathLegend->move(24,std::max(0,height()-pathLegend->height()-16)); pathLegend->raise();
 }
 void Viewport::draw_mesh(const Mesh &m, const Transform &t, QVector4D color, int triangles) {
     if (m.empty() || triangles == 0)
@@ -253,6 +285,7 @@ void Viewport::draw_mesh(const Mesh &m, const Transform &t, QVector4D color, int
     shader.setUniformValue("mvp", view_projection() * qt_matrix(t));
     shader.setUniformValue("model", qt_matrix(t));
     shader.setUniformValue("color", color);
+    shader.setUniformValue("unlit", 0.0f);
     shader.setUniformValue("useField", project && &m == &project->part && stressVisible ? 1.0f : 0.0f);
     int pos = shader.attributeLocation("position"), normal = shader.attributeLocation("normal"),
         field = shader.attributeLocation("fieldColor");
@@ -282,11 +315,11 @@ void Viewport::paintGL() {
     Transform bed = workpiece_pose(project->machine, state.joint);
     for (auto &f : project->fixtures)
         draw_mesh(f.mesh, f.movesWithBed ? bed : Transform::Identity(), QVector4D(.18, .23, .29, 1));
-    if (!beadEnds.empty()) {
+    if (depositedVisible && !beadEnds.empty()) {
         int completed = std::clamp(state.move - 1, 0, int(beadEnds.size()) - 1);
         draw_mesh(beads, bed, QVector4D(.20, .76, .65, 1), beadEnds[completed]);
     }
-    if (state.move > 0 && state.move < int(project->path.size()) && project->path[state.move].deltaE > 0) {
+    if (depositedVisible && state.move > 0 && state.move < int(project->path.size()) && project->path[state.move].deltaE > 0) {
         auto &a = project->path[state.move - 1];
         auto &b = project->path[state.move];
         Vec3 endpoint = part_position(project->machine, state.joint), delta = endpoint - a.position;
@@ -303,7 +336,7 @@ void Viewport::paintGL() {
             draw_mesh(unitBox, bed * tr, QVector4D(.25, .87, .72, 1));
         }
     }
-    for (auto &c : project->toolhead.components) {
+    for (auto &c : project->active_toolhead().components) {
         QVector4D color = c.nozzle ? QVector4D(.95, .70, .23, 1) : QVector4D(.55, .61, .72, 1);
         for (auto &e : project->report.events)
             if (e.move == state.move &&
@@ -311,13 +344,14 @@ void Viewport::paintGL() {
                  e.second == c.name + " [" + c.id + "]"))
                 color = QVector4D(1, .25, .23, 1);
         draw_mesh(c.renderMesh.empty() ? c.mesh : c.renderMesh,
-                  component_pose(project->machine, project->toolhead, c, state.joint), color);
+                  component_pose(project->machine, project->active_toolhead(), c, state.joint), color);
     }
     glDepthMask(GL_FALSE);
     draw_mesh(project->part, bed, QVector4D(.32, .52, .74, stressVisible ? .75f : transparent ? .16f : .65f));
     glDepthMask(GL_TRUE);
     draw_mesh(fixedMesh, bed, QVector4D(.23, .55, 1, .85));
     draw_mesh(loadedMesh, bed, QVector4D(1, .40, .24, .85));
+    draw_paths(bed);
     for (auto &event : project->report.events)
         if (event.move == state.move)
             draw_mesh(marker, translation(event.contact), QVector4D(1, .16, .30, 1));
@@ -368,6 +402,13 @@ void Viewport::paintGL() {
                              .arg(fieldMin, 0, 'g', 4)
                              .arg(fieldMax, 0, 'g', 4));
     painter.setPen(QColor("#7e93aa"));
+    if(pathMode!=3) {
+        const std::pair<QString,QColor> legend[]={{"Outer wall",QColor("#ffb454")},{"Inner wall",QColor("#efdf70")},
+            {"Infill",QColor("#35d4b0")},{"Solid",QColor("#70e0ee")},{"Support",QColor("#d391f0")},{"Travel",QColor("#72aafa")}};
+        int x=24;
+        for(auto &item:legend) { if(item.first=="Travel" && !travelPaths) continue; painter.setPen(item.second); painter.drawText(x,height()-45,item.first); x+=painter.fontMetrics().horizontalAdvance(item.first)+20; }
+        painter.setPen(QColor("#7e93aa"));
+    }
     painter.drawText(24, height() - 22,
                      pickTool ? "Click the nozzle tip to set its CAD coordinates"
                               : "Drag to orbit · Wheel to zoom · Click a part face to select it");
@@ -377,6 +418,74 @@ void Viewport::paintGL() {
                          project->report.status == Status::Collision ? "Collision detected · export blocked"
                                                                      : "Motion awaits validation");
     }
+}
+static Vec3 path_color(Role role) {
+    switch(role) {
+    case Role::OuterWall: return Vec3(1,.706,.33);
+    case Role::Wall: return Vec3(.94,.875,.44);
+    case Role::Infill: return Vec3(.208,.831,.69);
+    case Role::SolidInfill: return Vec3(.44,.878,.933);
+    case Role::Support: return Vec3(.827,.569,.941);
+    default: return Vec3(.447,.667,.98);
+    }
+}
+void Viewport::draw_paths(const Transform &bed) {
+    if(pathMode==3 || pathSegments.empty()) return;
+    if(!pathsUploaded) {
+        std::vector<float> data; data.reserve(pathSegments.size()*18);
+        std::set<int> conflicts(project->deposition.unsupportedMoves.begin(),project->deposition.unsupportedMoves.end());
+        for(const auto &event:project->report.events) if(event.status==Status::Collision) conflicts.insert(event.move);
+        for(const auto &segment:pathSegments) {
+            Vec3 color=conflicts.count(segment.move)?Vec3(1,.345,.42):path_color(segment.role);
+            for(const auto &v:{segment.start,segment.end}) {
+                for(int j=0;j<3;++j) data.push_back(float(v[j]));
+                data.insert(data.end(),{0,0,1});
+                for(int j=0;j<3;++j) data.push_back(float(color[j]));
+            }
+        }
+        pathBuffer.create(); pathBuffer.bind(); pathBuffer.allocate(data.data(),int(data.size()*sizeof(float))); pathBuffer.release(); pathsUploaded=true;
+    }
+    shader.bind(); pathBuffer.bind();
+    shader.setUniformValue("mvp",view_projection()*qt_matrix(bed)); shader.setUniformValue("model",qt_matrix(bed));
+    shader.setUniformValue("useField",1.0f); shader.setUniformValue("unlit",1.0f);
+    int pos=shader.attributeLocation("position"),normal=shader.attributeLocation("normal"),field=shader.attributeLocation("fieldColor");
+    for(int attribute:{pos,normal,field}) shader.enableAttributeArray(attribute);
+    shader.setAttributeBuffer(pos,GL_FLOAT,0,3,9*sizeof(float)); shader.setAttributeBuffer(normal,GL_FLOAT,3*sizeof(float),3,9*sizeof(float));
+    shader.setAttributeBuffer(field,GL_FLOAT,6*sizeof(float),3,9*sizeof(float));
+    glDepthMask(GL_FALSE); glLineWidth(2);
+    auto draw=[&](int begin,int end,float alpha) {
+        shader.setUniformValue("color",QVector4D(1,1,1,alpha));
+        if(travelPaths) glDrawArrays(GL_LINES,begin*2,(end-begin)*2);
+        else for(int i=begin;i<end;) {
+            while(i<end && pathSegments[i].role==Role::Travel) ++i;
+            int start=i; while(i<end && pathSegments[i].role!=Role::Travel) ++i;
+            if(i>start) glDrawArrays(GL_LINES,start*2,(i-start)*2);
+        }
+    };
+    int complete=int(std::lower_bound(pathSegments.begin(),pathSegments.end(),state.move,
+                    [](const ToolpathSegment &s,int move){return s.move<move;})-pathSegments.begin());
+    int prefix=complete;
+    while(prefix<int(pathSegments.size()) && pathSegments[prefix].move==state.move && pathSegments[prefix].finish<=state.fraction+1e-10) ++prefix;
+    if(pathMode==0) { draw(0,int(pathSegments.size()),.3f); draw(0,prefix,1); }
+    else if(pathMode==1) draw(0,prefix,1);
+    else if(!project->path.empty()) {
+        int layer=project->path[std::clamp(state.move,0,int(project->path.size())-1)].layer;
+        for(auto range:layerRanges[layer]) { draw(range.first,range.second,.35f); draw(range.first,std::max(range.first,std::min(range.second,prefix)),1); }
+    }
+    for(int attribute:{pos,normal,field}) shader.disableAttributeArray(attribute);
+    pathBuffer.release(); shader.release();
+    if(prefix<int(pathSegments.size())) {
+        const auto &s=pathSegments[prefix];
+        if(s.move==state.move && s.begin<state.fraction && (travelPaths || s.role!=Role::Travel)) {
+            Vec3 end=part_position(project->machine,state.joint);
+            float vertices[]={float(s.start.x()),float(s.start.y()),float(s.start.z()),float(end.x()),float(end.y()),float(end.z())};
+            QOpenGLBuffer active; active.create(); active.bind(); active.allocate(vertices,sizeof(vertices));
+            shader.bind(); shader.setUniformValue("color",QVector4D(1,1,1,1)); shader.setUniformValue("useField",0.0f);
+            shader.enableAttributeArray(pos); shader.setAttributeBuffer(pos,GL_FLOAT,0,3); shader.setAttributeValue(normal,QVector3D(0,0,1));
+            glDrawArrays(GL_LINES,0,2); shader.disableAttributeArray(pos); shader.release(); active.release(); active.destroy();
+        }
+    }
+    glLineWidth(1); glDepthMask(GL_TRUE);
 }
 void Viewport::mousePressEvent(QMouseEvent *e) {
     last = pressed = e->pos();
@@ -438,9 +547,9 @@ void Viewport::pick(QPoint position) {
         }
     };
     if (pickTool) {
-        for (size_t i = 0; i < project->toolhead.components.size(); ++i) {
-            auto &c = project->toolhead.components[i];
-            check(c.mesh, component_pose(project->machine, project->toolhead, c, state.joint), int(i));
+        for (size_t i = 0; i < project->active_toolhead().components.size(); ++i) {
+            auto &c = project->active_toolhead().components[i];
+            check(c.mesh, component_pose(project->machine, project->active_toolhead(), c, state.joint), int(i));
         }
         if (selected >= 0)
             Q_EMIT tool_picked(selected, hit);

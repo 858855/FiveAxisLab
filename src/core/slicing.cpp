@@ -1,6 +1,7 @@
 #include "slicing.h"
 #include "geometry.h"
 #include "stress.h"
+#include "process.h"
 #include <Eigen/LU>
 #include <Eigen/Sparse>
 #include <Eigen/SparseCholesky>
@@ -258,21 +259,26 @@ static void add_curve(Project &p, const std::vector<std::pair<Vec3, Vec3>> &curv
                       int region) {
     if (curve.size() < 2)
         return;
-    double area = bead_area(p.process.width, p.process.layerHeight),
+    double width = extrusion_width(p.process, role, layer), height = extrusion_height(p.process, layer);
+    double area = bead_area(width, height),
            filament = pi * std::pow(p.machine.filamentDiameter / 2, 2);
     if (!p.path.empty()) {
         auto lift = p.path.back();
-        lift.position += Vec3(0, 0, 3);
+        lift.position += Vec3(0, 0, p.process.travelLift);
         lift.deltaE = 0;
         lift.role = Role::Travel;
+        lift.speed = p.process.travelSpeed;
         p.path.push_back(lift);
     }
     Sample start;
-    start.position = curve.front().first + Vec3(0, 0, 3);
+    start.position = curve.front().first + Vec3(0, 0, p.process.travelLift);
     start.direction = curve.front().second;
     start.role = Role::Travel;
     start.layer = layer;
     start.region = region;
+    start.speed = p.process.travelSpeed;
+    start.width = width;
+    start.height = height;
     p.path.push_back(start);
     start.position = curve.front().first;
     p.path.push_back(start);
@@ -287,17 +293,27 @@ static void add_curve(Project &p, const std::vector<std::pair<Vec3, Vec3>> &curv
             s.role = role;
             s.layer = layer;
             s.region = region;
-            s.width = p.process.width;
-            s.height = p.process.layerHeight;
-            s.speed = p.process.speed;
+            s.width = width;
+            s.height = height;
+            s.speed = process_speed(p.process, role, layer);
             s.deltaE = (s.position - p.path.back().position).norm() * area / filament;
             p.path.push_back(s);
         }
     }
 }
+static double wall_offset(const ProcessSettings &s, int wall, int layer) {
+    double distance=0;
+    for(int i=0;i<=wall;++i)
+        distance += bead_spacing(extrusion_width(s,i==0?Role::OuterWall:Role::Wall,layer),extrusion_height(s,layer))*(i==wall?.5:1);
+    return distance;
+}
+static double wall_band(const ProcessSettings &s, int layer) {
+    return s.wallCount>0 ? wall_offset(s,s.wallCount-1,layer)+extrusion_width(s,Role::Wall,layer)/2 : 0;
+}
 static void walls(Project &p, const Surface &s, int layer, int &region) {
-    for (int wall = 0; wall < p.process.wallCount; ++wall) {
-        double target = (wall + .5) * bead_spacing(p.process.width, p.process.layerHeight);
+    for (int index = 0; index < p.process.wallCount; ++index) {
+        int wall=p.process.outerWallFirst?index:p.process.wallCount-index-1;
+        double target = wall_offset(p.process,wall,layer);
         std::vector<std::pair<Vec3, Vec3>> ends;
         std::vector<std::pair<int, int>> edges;
         std::map<std::array<long long, 3>, int> ids;
@@ -357,32 +373,43 @@ static void walls(Project &p, const Surface &s, int layer, int &region) {
                 if (next < 0)
                     break;
             }
-            if (p.stress.directional && curve.size() > 3 &&
+            if (curve.size() > 3 &&
                 (curve.front().first - curve.back().first).norm() < 1e-6) {
                 curve.pop_back();
                 size_t seam = 0;
                 double cost = 1e100;
                 for (size_t i = 0; i < curve.size(); ++i) {
-                    bool covered;
-                    auto t = p.stress.sample(curve[i].first, &covered);
-                    double v = covered ? t.norm() : 1e100;
+                    double v=0;
+                    if(p.process.seam==SeamPosition::LowStress && p.stress.directional) {
+                        bool covered; auto t=p.stress.sample(curve[i].first,&covered); v=covered?t.norm():1e100;
+                    } else if(p.process.seam==SeamPosition::Back)
+                        v=-curve[i].first.y()+1e-6*curve[i].first.x();
+                    else if(p.process.seam==SeamPosition::Nearest && !p.path.empty())
+                        v=(curve[i].first-p.path.back().position).squaredNorm();
+                    else v=curve[i].first.x()+1e-6*curve[i].first.y();
                     if (v < cost) {
                         cost = v;
                         seam = i;
                     }
                 }
+                if(p.process.seam==SeamPosition::Random)
+                    seam=(unsigned(layer+1)*1664525u+unsigned(wall+1)*1013904223u)%curve.size();
                 std::rotate(curve.begin(), curve.begin() + seam, curve.end());
                 curve.push_back(curve.front());
             }
-            add_curve(p, curve, Role::Wall, layer, region++);
+            add_curve(p, curve, wall==0?Role::OuterWall:Role::Wall, layer, region++);
         }
     }
 }
-static void infill(Project &p, const Surface &surface, int layer, int &region) {
-    if (p.process.infill <= 0 || surface.mesh.empty())
+static void infill(Project &p, const Surface &surface, int layer, int &region, bool solid) {
+    if ((!solid && p.process.infill <= 0) || surface.mesh.empty())
         return;
-    double spacing = bead_spacing(p.process.width, p.process.layerHeight) / p.process.infill;
+    Role role=solid?Role::SolidInfill:Role::Infill;
+    int families=!solid && p.process.infillPattern==InfillPattern::Grid?2:1;
+    double width=extrusion_width(p.process,role,layer);
+    double spacing = bead_spacing(width, extrusion_height(p.process,layer)) / (solid?1:p.process.infill) * families;
     auto b = surface.mesh.bounds();
+    for(int family=0;family<families;++family) {
     std::vector<Eigen::Vector2d> covered;
     auto near = [&](Eigen::Vector2d q, double distance) {
         for (auto &c : covered)
@@ -396,21 +423,22 @@ static void infill(Project &p, const Surface &surface, int layer, int &region) {
             Vec3 point, n;
             double d;
             if (near(seed, .8 * spacing) || !surface_point(surface, seed, point, n, d) ||
-                d < p.process.wallCount * p.process.width)
+                d < wall_band(p.process,layer))
                 continue;
             std::vector<std::pair<Vec3, Vec3>> halves[2];
             for (int sign = 0; sign < 2; ++sign) {
                 Eigen::Vector2d xy = seed;
-                Vec3 previous = layer % 2 ? Vec3::UnitY() : Vec3::UnitX();
+                double angle=p.process.infillAngle+(families==2?family*pi/2:(layer%2)*pi/2);
+                Vec3 previous(std::cos(angle),std::sin(angle),0);
                 previous *= sign ? 1 : -1;
                 for (int step = 0; step < 1000; ++step) {
-                    if (!surface_point(surface, xy, point, n, d) || d < p.process.wallCount * p.process.width)
+                    if (!surface_point(surface, xy, point, n, d) || d < wall_band(p.process,layer))
                         break;
                     if (step > 2 && near(xy, .7 * spacing))
                         break;
                     halves[sign].push_back({point, n});
                     Vec3 direction = previous;
-                    if (p.stress.directional) {
+                    if (!solid && p.process.infillPattern==InfillPattern::StressAligned && p.stress.directional) {
                         bool valid;
                         auto tensor = p.stress.sample(point, &valid);
                         double confidence;
@@ -431,7 +459,7 @@ static void infill(Project &p, const Surface &surface, int layer, int &region) {
                     if (direction.head<2>().norm() < 1e-6)
                         break;
                     previous = direction.normalized();
-                    xy += previous.head<2>().normalized() * std::min(.6, p.process.width);
+                    xy += previous.head<2>().normalized() * std::min(.6, width);
                 }
             }
             std::vector<std::pair<Vec3, Vec3>> curve;
@@ -442,20 +470,25 @@ static void infill(Project &p, const Surface &surface, int layer, int &region) {
             if (curve.size() > 1) {
                 for (auto &q : curve)
                     covered.push_back(q.first.head<2>());
-                add_curve(p, curve, Role::Infill, layer, region++);
+                add_curve(p, curve, role, layer, region++);
             }
         }
+    }
 }
 static void support_columns(Project &p) {
-    if (!p.process.supports)
+    if (!p.process.supports || p.process.supportMode==SupportMode::None) {
+        p.diagnostics << "Support generation disabled; unsupported deposition is still checked.";
         return;
+    }
     double width = p.process.width;
+    double pitch=width+p.process.supportSpacing;
+    if(p.process.supportMode==SupportMode::Reduced) pitch*=p.process.supportReduction;
     std::map<std::pair<int, int>, double> columns;
     for (auto &s : p.path)
         if (s.deltaE > 0 && s.position.z() > 2 * p.process.layerHeight &&
             !contains(p.part, s.position - Vec3(0, 0, 1.5 * p.process.layerHeight))) {
-            int x = int(std::round(s.position.x() / width)), y = int(std::round(s.position.y() / width));
-            double top = s.position.z() - p.process.layerHeight;
+            int x = int(std::round(s.position.x() / pitch)), y = int(std::round(s.position.y() / pitch));
+            double top = s.position.z() - s.height;
             auto key = std::make_pair(x, y);
             columns[key] = std::max(columns[key], top);
         }
@@ -467,21 +500,22 @@ static void support_columns(Project &p) {
     for (auto &[k, z] : columns)
         maxZ = std::max(maxZ, z);
     int region = -1;
-    for (double z = p.process.layerHeight; z <= maxZ + 1e-8; z += p.process.layerHeight)
+    int supportLayer=0;
+    for (double z = extrusion_height(p.process,0); z <= maxZ + 1e-8; z += p.process.layerHeight,++supportLayer)
         for (auto &[key, top] : columns)
             if (z <= top) {
-                Vec3 center(key.first * width, key.second * width, z);
+                Vec3 center(key.first * pitch, key.second * pitch, z);
                 if (contains(p.part, center))
                     continue;
                 add_curve(p,
                           {{center - Vec3(width / 3, 0, 0), Vec3::UnitZ()},
                            {center + Vec3(width / 3, 0, 0), Vec3::UnitZ()}},
-                          Role::Support, int(z / p.process.layerHeight), region--);
+                          Role::Support, supportLayer, region--);
             }
     p.path.insert(p.path.end(), original.begin(), original.end());
     p.diagnostics << QString(
-                         "Generated %1 removable support columns; final motion validation remains required.")
-                         .arg(columns.size());
+                         "Generated %1 support columns (%2, spacing %3 mm); deposition and collision checks remain required.")
+                         .arg(columns.size()).arg(p.process.supportMode==SupportMode::Reduced?"reduced":"normal").arg(pitch);
 }
 void regenerate_joints(Project &p) {
     JointState previous;
@@ -490,7 +524,7 @@ void regenerate_joints(Project &p) {
         double uprightCone = std::min(p.process.directionCone * .1, p.machine.angularTolerance * .25);
         if (s.direction.dot(Vec3::UnitZ()) >= std::cos(uprightCone))
             s.direction = Vec3::UnitZ();
-        auto solutions = inverse_kinematics(p.machine, s.position, s.direction, previous, p.toolhead);
+        auto solutions = inverse_kinematics(p.machine, s.position, s.direction, previous, p.active_toolhead());
         if (solutions.empty())
             throw std::runtime_error("No reachable machine pose at movement " + std::to_string(i));
         s.joint = solutions.front();
@@ -512,10 +546,10 @@ void refine_joint_motion(Project &p) {
             bool good = true;
             for (int j = 0; j < count; ++j) {
                 double u = (j + .5) / count;
-                JointState q = interpolate_motion(p.machine, p.toolhead, a.joint, b.joint, u);
-                Vec3 left = part_position(p.machine, interpolate_motion(p.machine, p.toolhead, a.joint,
+                JointState q = interpolate_motion(p.machine, p.active_toolhead(), a.joint, b.joint, u);
+                Vec3 left = part_position(p.machine, interpolate_motion(p.machine, p.active_toolhead(), a.joint,
                                                                         b.joint, double(j) / count));
-                Vec3 right = part_position(p.machine, interpolate_motion(p.machine, p.toolhead, a.joint,
+                Vec3 right = part_position(p.machine, interpolate_motion(p.machine, p.active_toolhead(), a.joint,
                                                                          b.joint, double(j + 1) / count));
                 Vec3 intended = (left + right) / 2;
                 Vec3 actual = part_position(p.machine, q);
@@ -536,9 +570,9 @@ void refine_joint_motion(Project &p) {
         for (int j = 1; j <= count; ++j) {
             Sample s = b;
             double u = double(j) / count;
-            s.joint = interpolate_motion(p.machine, p.toolhead, a.joint, b.joint, u);
+            s.joint = interpolate_motion(p.machine, p.active_toolhead(), a.joint, b.joint, u);
             s.position = part_position(p.machine, s.joint);
-            s.direction = part_direction(p.machine, p.toolhead, s.joint);
+            s.direction = part_direction(p.machine, p.active_toolhead(), s.joint);
             s.deltaE = b.deltaE > 0
                            ? (s.position - refined.back().position).norm() * bead_area(b.width, b.height) /
                                  (pi * std::pow(p.machine.filamentDiameter / 2, 2))
@@ -592,8 +626,8 @@ void check_deposition(Project &p) {
             valid = false;
         for (int j = 0; j < count; ++j) {
             double u = (j + .5) / count;
-            JointState q = interpolate_motion(p.machine, p.toolhead, a.joint, b.joint, u);
-            Vec3 point = part_position(p.machine, q), n = part_direction(p.machine, p.toolhead, q);
+            JointState q = interpolate_motion(p.machine, p.active_toolhead(), a.joint, b.joint, u);
+            Vec3 point = part_position(p.machine, q), n = part_direction(p.machine, p.active_toolhead(), q);
             Vec3 antiGravity = workpiece_pose(p.machine, q).linear().transpose() * Vec3::UnitZ();
             if (n.dot(antiGravity) < std::cos(p.process.maximumTilt) - 1e-6)
                 valid = false;
@@ -652,16 +686,17 @@ void slice_project(Project &p, std::atomic_bool *cancel, std::function<void(doub
     p.diagnostics.clear();
     if (p.part.empty())
         throw std::runtime_error("Import a printable part first");
-    if (p.process.layerHeight <= 0 || p.process.width < p.process.layerHeight || p.process.infill < 0 ||
-        p.process.infill > 1 || p.process.speed <= 0)
-        throw std::runtime_error("Invalid process settings");
+    validate_process(p.process);
+    if(p.active_toolhead().components.empty())
+        throw std::runtime_error("Import a toolhead STEP or enable the dummy toolhead option");
+    if(p.useDummyToolhead) p.diagnostics << "Dummy toolhead selected: collision results cover synthetic geometry only.";
     if (p.volume.cells.empty())
         p.volume = tetrahedralize(p.part, std::max(.05, p.part.bounds().sizes().prod() / 1500));
     auto field = scalar_field(p);
     double low = *std::min_element(field.begin(), field.end()),
            high = *std::max_element(field.begin(), field.end());
     int layer = 0, region = 0;
-    for (double level = low + p.process.layerHeight; level <= high + 1e-7;
+    for (double level = low + extrusion_height(p.process,0); level <= high + 1e-7;
          level += p.process.layerHeight, ++layer) {
         if (cancel && cancel->load())
             throw std::runtime_error("Slicing cancelled");
@@ -670,7 +705,9 @@ void slice_project(Project &p, std::atomic_bool *cancel, std::function<void(doub
             continue;
         for (auto &island : decompose_surface(surface)) {
             walls(p, island, layer, region);
-            infill(p, island, layer, region);
+            bool solid=layer<p.process.bottomShellLayers ||
+                       (p.process.topShellLayers>0 && level+p.process.topShellLayers*p.process.layerHeight>high+1e-7);
+            infill(p, island, layer, region, solid);
         }
         if (progress)
             progress((level - low) / (high - low));
@@ -678,6 +715,7 @@ void slice_project(Project &p, std::atomic_bool *cancel, std::function<void(doub
     if (p.path.size() < 2)
         throw std::runtime_error("No printable paths: increase meshing detail or reduce extrusion width");
     support_columns(p);
+    p.pathProcessFingerprint=process_fingerprint(p.process);
     regenerate_joints(p);
     check_deposition(p);
     p.diagnostics << QString("%1 layers, %2 independently scheduled curves, %3 coordinated movements.")

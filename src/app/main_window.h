@@ -25,13 +25,14 @@ class MainWindow : public QMainWindow {
     ~MainWindow();
     void load(const QString &filename);
     void capture(const QString &filename);
+    const fiveaxis::Project &current_project() const { return project; }
 
   private:
     fiveaxis::Project project, replay;
     Viewport *viewport;
-    QComboBox *controller, *layout, *mode, *selection;
+    QComboBox *controller, *layout, *mode, *selection, *supportMode;
     QDoubleSpinBox *layerHeight, *lineWidth, *infillDensity, *speed;
-    QCheckBox *curved, *supports, *extension;
+    QCheckBox *curved, *dummyToolhead, *extension;
     QLabel *summary, *validation;
     QTextEdit *log;
     QProgressBar *progress;
@@ -53,6 +54,8 @@ class MainWindow : public QMainWindow {
     void machine_setup();
     void machine_obstacles();
     void import_fem();
+    void process_settings();
+    void import_orca_settings();
     void setup_loads();
     void export_file();
     void toggle_play();

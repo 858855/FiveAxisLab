@@ -32,7 +32,8 @@ QString export_gcode(const Project &p) {
            << "\n; Start in the calibrated initial pose; homing is machine-specific.\n; Geometry "
               "verification does not establish physical print safety.\n";
     auto setup = project_json(p);
-    auto initialAxes = controller_axes(p.machine, p.toolhead, p.path.front().joint);
+    stream << "; Toolhead model: " << (p.useDummyToolhead ? "DUMMY - synthetic geometry only" : "imported / configured geometry") << "\n";
+    auto initialAxes = controller_axes(p.machine, p.active_toolhead(), p.path.front().joint);
     QJsonObject metadata{
         {"machine", setup["machine"]},
         {"initial", setup["path"].toArray().first()},
@@ -55,7 +56,7 @@ QString export_gcode(const Project &p) {
                    << " PIVOT_Y=" << p.machine.bedPivot.y() << " PIVOT_Z=" << p.machine.bedPivot.z()
                    << " MAX_FLOW=" << p.machine.maxFlow;
         if (p.machine.klipperExtension) {
-            Vec3 tip = p.toolhead.mount * p.toolhead.tcp;
+            Vec3 tip = p.active_toolhead().mount * p.active_toolhead().tcp;
             const char *letters[] = {"X", "Y", "Z"};
             for (int j = 0; j < 3; ++j)
                 stream << " TCP_" << letters[j] << "=" << tip[j] << " PIVOT_A" << letters[j] << "="
@@ -67,8 +68,8 @@ QString export_gcode(const Project &p) {
     for (size_t i = 1; i < p.path.size(); ++i) {
         const auto &a = p.path[i - 1];
         const auto &b = p.path[i];
-        auto axesA = controller_axes(p.machine, p.toolhead, a.joint),
-             axesB = controller_axes(p.machine, p.toolhead, b.joint);
+        auto axesA = controller_axes(p.machine, p.active_toolhead(), a.joint),
+             axesB = controller_axes(p.machine, p.active_toolhead(), b.joint);
         double metric = feed_metric(p.machine, axesA, axesB, b.deltaE), duration = b.time - a.time;
         if (metric < 1e-12)
             continue;
@@ -106,7 +107,7 @@ Project replay_gcode(const Project &context, const QString &gcode) {
         initial.position = part_position(p.machine, state);
     }
     p.path.push_back(initial);
-    state = controller_axes(p.machine, p.toolhead, state);
+    state = controller_axes(p.machine, p.active_toolhead(), state);
     bool absolute = true, relativeE = true;
     double absoluteExtrusion = 0, feed = 0;
     Role role = Role::Travel;
@@ -184,9 +185,9 @@ Project replay_gcode(const Project &context, const QString &gcode) {
         if (feed <= 0)
             throw std::runtime_error("G-code move lacks positive feedrate");
         Sample s;
-        s.joint = pose_from_axes(p.machine, p.toolhead, next);
+        s.joint = pose_from_axes(p.machine, p.active_toolhead(), next);
         s.position = part_position(p.machine, s.joint);
-        s.direction = part_direction(p.machine, p.toolhead, s.joint);
+        s.direction = part_direction(p.machine, p.active_toolhead(), s.joint);
         s.deltaE = e;
         s.role = e > 0 ? role : e < 0 ? Role::Retract : Role::Travel;
         s.layer = layer;

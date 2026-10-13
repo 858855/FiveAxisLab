@@ -1,0 +1,33 @@
+{
+  "coreCases": 38,
+  "desktopCases": 2,
+  "flowCases": 8,
+  "supportJobs": [
+    {
+      "mode": "normal",
+      "movements": 2630,
+      "supportVolumeMm3": 19.04216751766484,
+      "depositionViolations": 13,
+      "dummyToolhead": true,
+      "motionValidated": false
+    },
+    {
+      "mode": "reduced",
+      "movements": 1946,
+      "supportVolumeMm3": 4.946017537055803,
+      "depositionViolations": 55,
+      "dummyToolhead": true,
+      "motionValidated": false
+    },
+    {
+      "mode": "none",
+      "movements": 1707,
+      "supportVolumeMm3": 0.0,
+      "depositionViolations": 144,
+      "dummyToolhead": true,
+      "motionValidated": false
+    }
+  ],
+  "physicalPrintingValidated": false,
+  "nativeFirmwareRevalidated": false
+}

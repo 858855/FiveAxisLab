@@ -145,6 +145,10 @@ QString role_name(Role r) {
     switch (r) {
     case Role::Wall:
         return "Wall";
+    case Role::OuterWall:
+        return "Outer wall";
+    case Role::SolidInfill:
+        return "Solid infill";
     case Role::Infill:
         return "Infill";
     case Role::Support:
@@ -179,8 +183,8 @@ void time_path(Project &p) {
     for (size_t i = 1; i < p.path.size(); ++i) {
         auto &a = p.path[i - 1];
         auto &b = p.path[i];
-        double cart = (controller_axes(p.machine, p.toolhead, b.joint).xyz -
-                       controller_axes(p.machine, p.toolhead, a.joint).xyz)
+        double cart = (controller_axes(p.machine, p.active_toolhead(), b.joint).xyz -
+                       controller_axes(p.machine, p.active_toolhead(), a.joint).xyz)
                           .norm(),
                angle = std::max(std::abs(b.joint.a - a.joint.a), std::abs(b.joint.b - a.joint.b));
         double bead = (b.position - a.position).norm();
@@ -205,7 +209,7 @@ SimulationState simulation_at(const Project &p, double time, bool rebuildDeposit
     double dt = p.path[next].time - p.path[previous].time;
     s.fraction = dt > 0 ? (s.time - p.path[previous].time) / dt : 0;
     s.joint =
-        interpolate_motion(p.machine, p.toolhead, p.path[previous].joint, p.path[next].joint, s.fraction);
+        interpolate_motion(p.machine, p.active_toolhead(), p.path[previous].joint, p.path[next].joint, s.fraction);
     for (int i = 1; rebuildDeposition && i <= next; ++i)
         if (p.path[i].deltaE > 0) {
             Vec3 end = p.path[i].position;
@@ -214,5 +218,31 @@ SimulationState simulation_at(const Project &p, double time, bool rebuildDeposit
             s.deposited.emplace_back(p.path[i - 1].position, end);
         }
     return s;
+}
+std::vector<ToolpathSegment> simulation_toolpaths(const Project &p) {
+    std::vector<ToolpathSegment> result;
+    for (size_t i=1; i<p.path.size(); ++i) {
+        const auto &a=p.path[i-1], &b=p.path[i];
+        int count=1;
+        for (int attempt=0; attempt<12; ++attempt) {
+            bool good=true;
+            for(int j=0;j<count;++j) {
+                auto point=[&](double u) { return part_position(p.machine,interpolate_motion(p.machine,p.active_toolhead(),a.joint,b.joint,u)); };
+                double u=double(j)/count, v=double(j+1)/count;
+                if ((point((u+v)/2)-(point(u)+point(v))/2).norm()>p.machine.chordTolerance ||
+                    std::max(std::abs(b.joint.a-a.joint.a),std::abs(b.joint.b-a.joint.b))/count>p.machine.angularTolerance) { good=false; break; }
+            }
+            if (good || count>=2048) break;
+            count*=2;
+        }
+        for (int j=0;j<count;++j) {
+            double u=double(j)/count, v=double(j+1)/count;
+            Vec3 start=part_position(p.machine,interpolate_motion(p.machine,p.active_toolhead(),a.joint,b.joint,u));
+            Vec3 end=part_position(p.machine,interpolate_motion(p.machine,p.active_toolhead(),a.joint,b.joint,v));
+            if ((end-start).norm()>1e-9)
+                result.push_back({start,end,int(i),b.layer,b.deltaE>0?b.role:Role::Travel,u,v});
+        }
+    }
+    return result;
 }
 } // namespace fiveaxis

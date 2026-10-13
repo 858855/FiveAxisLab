@@ -10,7 +10,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SDK = ROOT / 'sdk/ucrt64'
-OUT = ROOT / 'dist/FiveAxisLab-0.1.0-win64'
+OUT = ROOT / 'dist/FiveAxisLab-0.2.0-win64'
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
@@ -60,13 +60,13 @@ def main():
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as z:
         for p in OUT.rglob('*'):
             if p.is_file() and 'cache' not in p.parts:z.write(p, str(p.relative_to(OUT.parent)))
-    sourceArchive=ROOT/'dist/FiveAxisLab-0.1.0-source.zip'
+    sourceArchive=ROOT/'dist/FiveAxisLab-0.2.0-source.zip'
     with zipfile.ZipFile(sourceArchive,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as z:
         for directory in ['src','tests','tools','controllers','docs','examples','vendor']:
             for p in (ROOT/directory).rglob('*'):
-                if p.is_file() and not any(x in p.parts for x in ['__pycache__','.git']) and p.suffix not in ['.dll','.so','.o','.obj']:
+                if p.is_file() and not any(x in p.parts for x in ['__pycache__','.git','out']) and p.suffix not in ['.dll','.so','.o'] and (p.suffix!='.obj' or directory=='examples'):
                     z.write(p,'FiveAxisLab/'+str(p.relative_to(ROOT)))
-        for filename in ['CMakeLists.txt','LICENSE','README.md','THIRD_PARTY.md','dependencies.lock.json','upstream.lock.json','.gitignore']:
+        for filename in ['CMakeLists.txt','LICENSE','README.md','THIRD_PARTY.md','dependencies.lock.json','upstream.lock.json','.gitignore','.gitattributes','.clang-format']:
             z.write(ROOT/filename,'FiveAxisLab/'+filename)
     print(json.dumps({'runtimeFiles':len(hashes),'portableZip':str(archive),'sourceZip':str(sourceArchive)},indent=2))
 
