@@ -441,6 +441,7 @@ class PlateTests : public QObject {
         m.name = "Soluble";
         p.materials.push_back(m);
         auto &t = p.tools[0];
+        t.nozzle.reset_bead_limits();
         t.routes[0].selectCommand = "M42 P1 S0";
         t.routes.push_back({m.id, "1", "M42 P1 S1", true});
         t.change.load = t.change.unload = 5;
@@ -464,6 +465,8 @@ class PlateTests : public QObject {
             load += s.event == EventKind::Load;
             unload += s.event == EventKind::Unload;
             purges += s.role == Role::Purge && s.deltaE > 0;
+            if (s.role == Role::Purge && s.deltaE > 0)
+                QCOMPARE(s.height, t.nozzle.minHeight);
             QCOMPARE(s.toolId, QString("tool-1"));
         }
         QCOMPARE(ids.size(), 2);

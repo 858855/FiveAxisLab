@@ -818,7 +818,7 @@ struct Planner {
         auto origin = current();
         double width = std::clamp(default_line_width(tool.nozzle.diameter), tool.nozzle.minWidth,
                                   tool.nozzle.maxWidth),
-               height = std::min(.2, tool.nozzle.maxHeight);
+               height = std::clamp(.2, tool.nozzle.minHeight, tool.nozzle.maxHeight);
         double area = bead_area(width, height), filament = pi * std::pow(incoming.diameter / 2, 2);
         if (!p.plate.purgeTower) {
             require(p.plate.purgeCapacity > 0 && stationWaste + volume <= p.plate.purgeCapacity &&

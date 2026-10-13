@@ -6,4 +6,6 @@ All four limits remain editable. Disable **Auto-fill bead limits when nozzle dia
 
 The new desktop workflow covers automatic filling, editable overrides, disabling/re-enabling auto-fill, switching between two tools, the maximum supported diameter, calibration invalidation, project round trips and older schema-2 files without the new preference. Native captures are in `examples/reports/nozzle-limits-auto.png` and `nozzle-limits.png`.
 
+Purge tower generation also respects the installed nozzle's selected minimum and maximum height, including the new automatic ranges. The shared-nozzle material-change test exercises a 0.8 mm nozzle with a 0.4 mm minimum purge bead height.
+
 Verification: 55 core, 33 plate, 13 native desktop and 11 Python checks passed (112 total, including Qt initialization/cleanup; zero failures or skipped rows). Machine-readable reports are `examples/reports/0.4.1-*.xml`. Hardware qualification remains as described in [the 0.4.0 evidence](RELEASE_0_4.md).
