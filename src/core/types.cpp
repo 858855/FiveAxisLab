@@ -99,7 +99,37 @@ std::vector<JointState> inverse_kinematics(const MachineProfile &m, const Vec3 &
     Vec3 n = normal.normalized();
     std::vector<JointState> result;
     std::vector<std::pair<double, double>> branches;
-    if (m.layout == Layout::RotaryBed) {
+    Vec3 mounted=(t.mount.linear()*t.axis).normalized();
+    if((mounted-Vec3::UnitZ()).norm()>1e-10) {
+        if(m.layout==Layout::RotaryBed) {
+            double radius=std::hypot(mounted.y(),mounted.z());
+            if(radius<1e-10) {
+                if(std::abs(n.z())>1e-8)return result;
+                Vec3 target=rotation_x(-previous.a).linear()*mounted;
+                branches.push_back({previous.a,std::atan2(target.y(),target.x())-std::atan2(n.y(),n.x())});
+            }else if(std::abs(n.z())<=radius+1e-10) {
+                double phase=std::atan2(mounted.y(),mounted.z()),angle=std::acos(std::clamp(n.z()/radius,-1.0,1.0));
+                for(double a:{angle-phase,-angle-phase}) {
+                    Vec3 target=rotation_x(-a).linear()*mounted;
+                    double b=std::hypot(n.x(),n.y())<1e-9?previous.b:std::atan2(target.y(),target.x())-std::atan2(n.y(),n.x());
+                    branches.push_back({a,b});
+                }
+            }
+        }else {
+            double radius=std::hypot(mounted.x(),mounted.z());
+            if(radius<1e-10) {
+                if(std::abs(n.x())>1e-8)return result;
+                branches.push_back({std::atan2(n.z(),n.y())-std::atan2(mounted.z(),mounted.y()),previous.b});
+            }else if(std::abs(n.x())<=radius+1e-10) {
+                double phase=std::atan2(mounted.z(),mounted.x()),angle=std::acos(std::clamp(n.x()/radius,-1.0,1.0));
+                for(double b:{phase+angle,phase-angle}) {
+                    Vec3 tilted=rotation_y(b).linear()*mounted;
+                    double a=std::hypot(n.y(),n.z())<1e-9?previous.a:std::atan2(n.z(),n.y())-std::atan2(tilted.z(),tilted.y());
+                    branches.push_back({a,b});
+                }
+            }
+        }
+    } else if (m.layout == Layout::RotaryBed) {
         double h = std::hypot(n.x(), n.y()), a = std::atan2(h, n.z());
         double b = h < 1e-9 ? previous.b : std::atan2(n.x(), n.y());
         branches = {{a, b}, {-a, b + pi}};

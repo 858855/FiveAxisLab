@@ -5,6 +5,7 @@
 #include "core/project.h"
 #include "core/process.h"
 #include "core/motion_preview.h"
+#include "core/profile.h"
 #include "core/slicing.h"
 #include "core/step_import.h"
 #include "core/stress.h"
@@ -272,6 +273,13 @@ MainWindow::MainWindow() : project(demo_project()) {
     auto processMenu=menuBar()->addMenu("Process");
     processMenu->addAction("Process settings · Orca options",this,&MainWindow::process_settings);
     processMenu->addAction("Import Orca / FiveAxisLab process JSON",this,&MainWindow::import_orca_settings);
+    processMenu->addAction("Import profile centerline guide JSON…",this,[this]{
+        if(worker.isRunning())return;
+        auto file=QFileDialog::getOpenFileName(this,"Profile centerline and normals · source model millimetres",{},"Profile guide (*.json)");
+        if(file.isEmpty())return;
+        try{project.profileGuide=import_profile_guide(file,project.partPlacement);project.process.profileNormal=true;project.invalidate();replaying=false;refresh();log->append("Profile guide loaded. Slice again to generate perpendicular nozzle motion.");}
+        catch(const std::exception &e){show_error(e.what());}
+    });
     auto machineMenu=menuBar()->addMenu("Machine"); machineMenu->addAction("Setup / toolhead calibration",this,&MainWindow::machine_setup);
     machineMenu->addAction("Bed, fixtures and machine bodies",this,&MainWindow::machine_obstacles);
     auto simulationMenu=menuBar()->addMenu("Simulation"); simulationMenu->addAction("Try collision avoidance",this,[this]{run("Repair");});
@@ -286,6 +294,14 @@ MainWindow::MainWindow() : project(demo_project()) {
     simulationMenu->addSeparator();
     simulationMenu->addAction("Open rotary-bed axis demonstration",this,[axisDemo]{axisDemo(Layout::RotaryBed);});
     simulationMenu->addAction("Open tilting-head axis demonstration",this,[axisDemo]{axisDemo(Layout::TiltingHead);});
+    auto spiralDemo=[this](Layout machineLayout){
+        if(worker.isRunning())return;
+        playing=false;replaying=false;time=0;project=spiral_profile_project(machineLayout);fixedFaces.clear();forceFaces.clear();
+        refresh();set_workspace(1);viewport->fit();
+        execute("Generate spiral profile test",[](Project &p,std::atomic_bool *cancel){slice_project(p,cancel);p.report=CollisionReport{};p.diagnostics<<"Spiral five-axis test: profile-normal motion generated; collision validation remains required.";});
+    };
+    simulationMenu->addAction("Open spiral five-axis test · rotary bed",this,[spiralDemo]{spiralDemo(Layout::RotaryBed);});
+    simulationMenu->addAction("Open spiral five-axis test · tilting head",this,[spiralDemo]{spiralDemo(Layout::TiltingHead);});
     auto view = menuBar()->addMenu("View");
     view->addAction("Fit geometry", viewport, &Viewport::fit);
     view->addAction("Save preview image…", this, [this] {
@@ -593,6 +609,7 @@ void MainWindow::import_part() {
         for (auto &v : p.part.vertices)
             v -= offset;
         p.partPlacement = translation(-offset);
+        p.profileGuide.clear();p.process.profileNormal=false;
         p.volume = {};
         p.stress = {};
         p.loads.fixedNodes.clear();

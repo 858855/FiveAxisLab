@@ -12,6 +12,7 @@ QString process_fingerprint(const ProcessSettings &s) {
 }
 QJsonObject process_json(const ProcessSettings &s) {
     QJsonObject j;
+    if(s.profileNormal)j["profileNormal"]=true;
 #define FIELD(name) j[#name] = s.name
     FIELD(layerHeight); FIELD(width); FIELD(infill); FIELD(speed); FIELD(directionCone); FIELD(maximumTilt);
     FIELD(curved); FIELD(supports); FIELD(wallCount); FIELD(maximumBridge); FIELD(nozzleDiameter);
@@ -53,6 +54,8 @@ ProcessSettings read_process(const QJsonObject &j) {
     NUMBER(supportAngle); NUMBER(skirtDistance); NUMBER(brimWidth); NUMBER(brimGap);
 #undef NUMBER
     s.curved = j["curved"].toBool(s.curved); s.supports = j["supports"].toBool(s.supports);
+    if(j.contains("profileNormal") && !j["profileNormal"].isBool())throw std::runtime_error("Invalid profileNormal setting");
+    s.profileNormal=j["profileNormal"].toBool();
     s.wallCount = j["wallCount"].toInt(s.wallCount);
     s.topShellLayers = j["topShellLayers"].toInt(s.topShellLayers);
     s.bottomShellLayers = j["bottomShellLayers"].toInt(s.bottomShellLayers);

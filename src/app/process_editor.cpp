@@ -74,7 +74,9 @@ ProcessEditor::ProcessEditor(QWidget *parent):QWidget(parent) {
     choice("bottomPattern","Bottom surface pattern",{"Rectilinear","Monotonic","Concentric"}); number("bottomDensity","Bottom surface density",0,100,"%",100); count("bottomShellLayers","Bottom shell layers",0,100); number("bottomThickness","Bottom shell thickness",0,20,"mm");
     unavailable("bottomColorLayers","Bottom color layers","One-extruder research preset"); unavailable("solidPattern","Internal solid pattern","Internal shells currently use monotonic strokes","Monotonic");
     section(1,"Infill"); number("infill","Sparse infill density",0,100,"%",100); choice("infillPattern","Sparse infill pattern",{"Stress aligned","Rectilinear","Grid"}); number("infillAngle","Infill direction",-360,360,"°",180/pi,true);
-    section(1,"Strength / five-axis"); check("curved","Curved layers from stress"); number("directionCone","Orientation search cone",0,89,"°",180/pi,true); number("maximumTilt","Maximum deposition tilt",0,89,"°",180/pi,true);
+    section(1,"Strength / five-axis"); check("curved","Curved layers from stress"); check("profileNormal","Nozzle perpendicular to profile");
+    bindings["profileNormal"].input->setToolTip("Slice along a centerline guide, without FEM. Process → Import profile guide, or Simulation → Open spiral five-axis test.");
+    number("directionCone","Orientation search cone",0,89,"°",180/pi,true); number("maximumTilt","Maximum deposition tilt",0,89,"°",180/pi,true);
     section(2,"First layer speed"); number("firstLayerSpeed","First layer",0,1000,"mm/s"); number("firstLayerInfillSpeed","First layer infill",0,1000,"mm/s");
     section(2,"Other layer speeds"); number("speed","Default print",.1,1000,"mm/s");
     for(const auto &item:QList<QPair<QString,QString>>{{"outerWallSpeed","Outer wall"},{"innerWallSpeed","Inner wall"},{"infillSpeed","Sparse infill"},{"solidSpeed","Internal solid infill"},{"topSpeed","Top surface"},{"supportSpeed","Support"}}) number(item.first,item.second,0,1000,"mm/s");

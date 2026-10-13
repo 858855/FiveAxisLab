@@ -4,6 +4,8 @@
 #include "app/step_dialog.h"
 #include "core/step_import.h"
 #include "core/motion_preview.h"
+#include "core/profile.h"
+#include "core/slicing.h"
 #include "core/collision.h"
 #include <QPushButton>
 #include <QDialog>
@@ -19,6 +21,18 @@ using namespace fiveaxis;
 class DesktopTests : public QObject {
     Q_OBJECT
   private Q_SLOTS:
+    void spiral_profile_preview_data(){QTest::addColumn<bool>("head");QTest::newRow("bed")<<false;QTest::newRow("head")<<true;}
+    void spiral_profile_preview(){
+        QFETCH(bool,head);auto p=spiral_profile_project(head?Layout::TiltingHead:Layout::RotaryBed);p.process.layerHeight=1.5;p.process.width=1.6;p.process.wallCount=1;p.process.infill=.2;try{slice_project(p);}catch(const std::exception &e){QFAIL(e.what());}
+        QTemporaryDir dir;auto file=dir.filePath("spiral.5axis");save_project(p,file);MainWindow window;window.load(file);window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto view=window.findChild<Viewport*>("simulationViewport");auto slider=window.findChild<QSlider*>("moveTimeline");auto checkbox=window.findChild<QCheckBox*>("profileNormal");QVERIFY(checkbox && checkbox->isChecked());
+        size_t chosen=1;for(size_t i=1;i<p.path.size();++i)if(p.path[i].deltaE>0 && std::abs(p.path[i].joint.a)>.35){chosen=i;break;}
+        double wanted=(p.path[chosen-1].time+p.path[chosen].time)/2;slider->setValue(int(wanted/p.path.back().time*10000));auto state=simulation_at(p,p.path.back().time*slider->value()/10000.0,false);
+        QVERIFY(!view->axis_pose_active());QVERIFY((view->displayed_joint().xyz-state.joint.xyz).norm()<1e-9);
+        auto sample=p.path[state.move];QVERIFY(sample.deltaE>0);QVERIFY((part_direction(p.machine,p.active_toolhead(),view->displayed_joint())-profile_layer(p,sample.layer).normal).norm()<1e-6);
+        QVERIFY(window.findChild<QLabel*>("simulationHud")->text().contains("PROFILE NORMAL"));QVERIFY(!window.findChild<QPushButton*>("exportGcode")->isEnabled());
+        slider->setValue(1500);slider->setValue(int(wanted/p.path.back().time*10000));QVERIFY((view->displayed_joint().xyz-state.joint.xyz).norm()<1e-9);window.close();
+    }
     void rotary_axis_preview_data(){QTest::addColumn<bool>("head");QTest::newRow("rotary-bed")<<false;QTest::newRow("tilting-head")<<true;}
     void rotary_axis_preview(){
         QFETCH(bool,head);Project p;p.machine.layout=head?Layout::TiltingHead:Layout::RotaryBed;p.machine.minB=head?-75*pi/180:-pi;p.machine.maxB=-p.machine.minB;

@@ -6,6 +6,7 @@
 #include "geometry.h"
 #include "stress.h"
 #include "process.h"
+#include "profile.h"
 #include <Eigen/LU>
 #include <Eigen/Sparse>
 #include <Eigen/SparseCholesky>
@@ -674,8 +675,10 @@ void regenerate_joints(Project &p) {
     JointState previous;
     for (size_t i = 0; i < p.path.size(); ++i) {
         auto &s = p.path[i];
+        if(p.process.profileNormal && s.role!=Role::Support && s.region>=0)
+            s.direction=profile_layer(p,s.layer).normal;
         double uprightCone = std::min(p.process.directionCone * .1, p.machine.angularTolerance * .25);
-        if (s.direction.dot(Vec3::UnitZ()) >= std::cos(uprightCone))
+        if (!p.process.profileNormal && s.direction.dot(Vec3::UnitZ()) >= std::cos(uprightCone))
             s.direction = Vec3::UnitZ();
         auto solutions = inverse_kinematics(p.machine, s.position, s.direction, previous, p.active_toolhead());
         if (solutions.empty())
@@ -845,9 +848,10 @@ void slice_project(Project &p, std::atomic_bool *cancel, std::function<void(doub
     if(p.useDummyToolhead) p.diagnostics << "Dummy toolhead selected: collision results cover synthetic geometry only.";
     if (p.volume.cells.empty())
         p.volume = tetrahedralize(p.part, std::max(.05, p.part.bounds().sizes().prod() / 1500));
-    auto field = scalar_field(p);
-    double low = *std::min_element(field.begin(), field.end()),
-           high = *std::max_element(field.begin(), field.end());
+    if(p.process.profileNormal)validate_profile_guide(p.profileGuide);
+    auto field = p.process.profileNormal?std::vector<double>{}:scalar_field(p);
+    double low = p.process.profileNormal?0:*std::min_element(field.begin(), field.end()),
+           high = p.process.profileNormal?profile_length(p.profileGuide):*std::max_element(field.begin(), field.end());
     int layer = 0, region = 0;
     double previousLevel=low;
     for (double level = p.process.preciseZ?std::min(high,low + extrusion_height(p.process,0)):low+extrusion_height(p.process,0); level <= high + 1e-7;
@@ -855,11 +859,31 @@ void slice_project(Project &p, std::atomic_bool *cancel, std::function<void(doub
         if(level>high) break;
         if (cancel && cancel->load())
             throw std::runtime_error("Slicing cancelled");
-        auto surface = iso_surface(p.volume, field, std::min(level, high - 1e-7));
+        double isoLevel=std::min(level,high-1e-7);
+        ProfileStation section;
+        if(p.process.profileNormal) {
+            section=profile_section(p.profileGuide,isoLevel);
+            if(section.normal.z()<std::cos(p.process.maximumTilt)-1e-8)throw std::runtime_error("Profile normal exceeds the permitted deposition tilt");
+            field.clear();for(const auto &v:p.volume.vertices)field.push_back((v-section.center).dot(section.normal));
+            isoLevel=0;
+        }
+        auto surface = iso_surface(p.volume, field, isoLevel);
         if (surface.mesh.empty())
-            continue;
+            {if(p.process.profileNormal)throw std::runtime_error("Profile plane misses the model; correct the centerline guide");continue;}
         size_t begin=p.path.size();
-        for (auto &island : decompose_surface(surface)) {
+        auto islands=decompose_surface(surface);
+        if(p.process.profileNormal) {
+            int chosen=-1;double best=1e100;
+            for(size_t i=0;i<islands.size();++i) {
+                auto bounds=islands[i].mesh.bounds();
+                if(bounds.exteriorDistance(section.center)>p.machine.chordTolerance)continue;
+                double score=(bounds.center()-section.center).squaredNorm();
+                if(score<best){best=score;chosen=int(i);}
+            }
+            if(chosen<0)throw std::runtime_error("Profile center is outside every cross-section; correct the guide");
+            auto selected=std::move(islands[chosen]);islands.clear();islands.push_back(std::move(selected));
+        }
+        for (auto &island : islands) {
             double nominalSpacing=bead_spacing(extrusion_width(p.process,Role::Brim,layer),extrusion_height(p.process,layer));
             bool autoBrim=p.process.brimType==1 && p.part.bounds().sizes().z()>5*std::min(p.part.bounds().sizes().x(),p.part.bounds().sizes().y());
             if(layer==0 && (p.process.brimType>1 || autoBrim)) {
@@ -893,13 +917,13 @@ void slice_project(Project &p, std::atomic_bool *cancel, std::function<void(doub
     support_columns(p);
     p.pathProcessFingerprint=process_fingerprint(p.process);
     regenerate_joints(p);
+    if(p.process.profileNormal && profile_motion_violation(p)>=0)throw std::runtime_error("Generated nozzle motion is not perpendicular to the profile");
     check_deposition(p);
     p.diagnostics << QString("%1 layers, %2 independently scheduled curves, %3 coordinated movements.")
                          .arg(layer)
                          .arg(region)
                          .arg(p.path.size());
-    p.diagnostics << "Research scalar-field solver uses stress-weighted diffusion with bounded spacing; "
-                     "material behavior and strength require calibration.";
+    p.diagnostics << (p.process.profileNormal?"Profile-normal slicing follows explicit cross-section planes in centerline arc order. Extrusion orientation is locked; deposition and collision checks remain required.":"Research scalar-field solver uses stress-weighted diffusion with bounded spacing; material behavior and strength require calibration.");
 }
 double stress_alignment(const Project &p) {
     double sum = 0, weight = 0;

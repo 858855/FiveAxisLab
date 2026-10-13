@@ -32,6 +32,8 @@ These fields record the requested UI inventory. They are not implemented algorit
 
 ## Preview and evidence
 
+Version 0.3.2 adds **Strength → Nozzle perpendicular to profile**, **Process → Import profile centerline guide JSON** and **Simulation → Open spiral five-axis test**. The active cross-section and nozzle-normal error appear in Preview. [Generation behavior and limits](PROFILE_NORMAL.md).
+
 Version 0.3.1 adds the **Axis behavior** inspector: recorded motion, manual poses and animated tilt/roll, with calibrated rotary-axis markers. Manual/animated inspection freezes deposition, leaves planned data unchanged and blocks export. [Controls, layouts and demonstration projects](AXIS_PREVIEW.md).
 
 Line-type checkboxes filter both beads and paths. Two vertical sliders select a layer range; the upper boundary seeks to that layer's last motion. These are display filters and never change collision checking. Horizontal scrubbing and stepping restore the deposited prefix, including backward movement. Hiding the toolhead does not remove it from the collision scene.

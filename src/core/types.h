@@ -145,6 +145,7 @@ struct ProcessSettings {
     double layerHeight = 0.2, width = 0.45, infill = 0.25, speed = 25;
     double directionCone = 10 * pi / 180, maximumTilt = 65 * pi / 180;
     bool curved = true, supports = true;
+    bool profileNormal = false;
     int wallCount = 2;
     double maximumBridge = 5;
     double nozzleDiameter = .4, firstLayerHeight = 0, firstLayerWidth = 0;
@@ -181,8 +182,12 @@ struct StructuralComparison {
     bool available = false;
     double planarCompliance = 0, curvedCompliance = 0, alignment = 0;
 };
+struct ProfileStation {
+    Vec3 center = Vec3::Zero(), normal = Vec3::UnitZ();
+};
 struct Project {
     Mesh part;
+    std::vector<ProfileStation> profileGuide;
     Transform partPlacement = Transform::Identity();
     VolumeMesh volume;
     ToolheadAssembly toolhead;

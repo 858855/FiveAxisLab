@@ -7,6 +7,7 @@
 #include "core/step_import.h"
 #include "core/stress.h"
 #include "core/motion_preview.h"
+#include "core/profile.h"
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDir>
@@ -43,8 +44,16 @@ int main(int argc, char **argv) {
     parser.addOption({"plan-only", "Save planned motion with an unresolved validation status"});
     parser.addOption({"head-motion", "Generate a compensated tilting-head deposition fixture"});
     parser.addOption({"axis-demo", "Save a non-printing tilt/roll preview; requires --output", "bed|head"});
+    parser.addOption({"spiral-demo", "Generate the profile-normal spiral test; requires --output", "bed|head"});
+    parser.addOption({"profile-guide", "Slice perpendicular to profile stations in source-model millimetres", "file"});
     parser.process(app);
     try {
+        if(parser.isSet("spiral-demo")) {
+            auto value=parser.value("spiral-demo");if(value!="bed" && value!="head")throw std::runtime_error("Spiral demo must be bed or head");
+            if(!parser.isSet("output") || parser.isSet("gcode") || parser.isSet("slice") || parser.isSet("validate") || parser.isSet("replay"))throw std::runtime_error("Spiral demo requires --output; validate it separately before export");
+            auto p=spiral_profile_project(value=="bed"?Layout::RotaryBed:Layout::TiltingHead);slice_project(p);p.report=CollisionReport{};
+            save_project(p,parser.value("output"));std::cout<<"Spiral profile-normal test saved: "<<p.path.size()<<" movements. Collision validation remains required.\n";return 0;
+        }
         if(parser.isSet("axis-demo")){
             auto value=parser.value("axis-demo");if(value!="bed" && value!="head")throw std::runtime_error("Axis demo must be bed or head");
             if(!parser.isSet("output") || parser.isSet("gcode") || parser.isSet("slice") || parser.isSet("validate") || parser.isSet("replay"))throw std::runtime_error("Axis demo requires --output and cannot export or validate a print job");
@@ -135,6 +144,7 @@ int main(int argc, char **argv) {
             for (auto &v : p.part.vertices)
                 v -= shift;
             p.partPlacement = translation(-shift);
+            if(parser.isSet("profile-guide")){p.profileGuide=import_profile_guide(parser.value("profile-guide"),p.partPlacement);p.process.profileNormal=true;}
             if (parser.isSet("fem")) {
                 VtuOptions options;
                 options.array = parser.value("stress-array");

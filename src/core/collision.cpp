@@ -1,5 +1,6 @@
 #include "collision.h"
 #include "process.h"
+#include "profile.h"
 #include "geometry.h"
 #include "slicing.h"
 #include "stress.h"
@@ -530,6 +531,18 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
     CollisionReport r;
     r.fingerprint = p.fingerprint();
     r.status = Status::Clear;
+    if(p.process.profileNormal) {
+        try {
+            int move=profile_motion_violation(p);
+            if(move>=0) {
+                r.status=Status::Unresolved;
+                r.events.push_back({Status::Unresolved,"Nozzle axis","Profile plane","Nozzle orientation or TCP departs from the required profile plane",move,p.path[move].time});
+                return r;
+            }
+        }catch(const std::exception &e) {
+            r.status=Status::Unresolved;r.events.push_back({Status::Unresolved,"Profile guide","Invalid guide",QString::fromUtf8(e.what())});return r;
+        }
+    }
     if(!p.pathProcessFingerprint.isEmpty() && p.pathProcessFingerprint!=process_fingerprint(p.process)) {
         r.status=Status::Unresolved;
         r.events.push_back({Status::Unresolved,"Print process","Stale toolpaths","Process settings changed; slice again to generate matching motion"});
@@ -710,7 +723,7 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
             Vec3 x = original.unitOrthogonal(), y = original.cross(x);
             for (int cone = 0; cone <= 2 && !good && trials < 256; ++cone)
                 for (int angle = 0; angle < 12 && !good && trials < 256; ++angle) {
-                    double tilt = cone * p.process.directionCone / 2, az = angle * 2 * pi / 12;
+                    double tilt = p.process.profileNormal?0:cone * p.process.directionCone / 2, az = angle * 2 * pi / 12;
                     Vec3 n =
                         (original * std::cos(tilt) + (x * std::cos(az) + y * std::sin(az)) * std::sin(tilt))
                             .normalized();
@@ -829,7 +842,7 @@ bool repair_motion(Project &p, std::atomic_bool *cancel) {
     }
     p.report = validate_motion(p, cancel);
     // One bounded retry changes the orientation of the affected curve as a region.
-    if (!p.report.exportable() && !p.report.events.empty() && !(cancel && cancel->load())) {
+    if (!p.process.profileNormal && !p.report.exportable() && !p.report.events.empty() && !(cancel && cancel->load())) {
         auto event = p.report.events.front();
         if (event.move > 0 && event.move < int(p.path.size()) && p.path[event.move].deltaE > 0) {
             Project candidate = p;

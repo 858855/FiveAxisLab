@@ -1,0 +1,70 @@
+{
+  "version": "0.3.2",
+  "checks": {
+    "coreCases": 47,
+    "desktopWorkflows": 8,
+    "flowCases": 8,
+    "failures": 0
+  },
+  "projects": {
+    "spiral-bed.5axis": {
+      "movements": 13562,
+      "layers": 170,
+      "extrusionMovements": 11334,
+      "maximumNozzleNormalErrorDegrees": 1.2302313969880764e-13,
+      "maximumProfilePlaneErrorMm": 1.252190386935581e-07,
+      "aRangeDegrees": [
+        -54.719024176415125,
+        54.70134350480324
+      ],
+      "secondAxisRangeDegrees": [
+        0.11637369791666664,
+        179.88362630208334
+      ],
+      "depositionCoverage": 1,
+      "depositionViolations": 4,
+      "collisionValidated": false,
+      "exportable": false
+    },
+    "spiral-head.5axis": {
+      "movements": 13192,
+      "layers": 170,
+      "extrusionMovements": 11334,
+      "maximumNozzleNormalErrorDegrees": 1.1900811552157442e-13,
+      "maximumProfilePlaneErrorMm": 1.252190386935581e-07,
+      "aRangeDegrees": [
+        -35.76785945185589,
+        54.71866553376517
+      ],
+      "secondAxisRangeDegrees": [
+        -51.32889298998416,
+        51.355489024968485
+      ],
+      "depositionCoverage": 1,
+      "depositionViolations": 4,
+      "collisionValidated": false,
+      "exportable": false
+    },
+    "workspace-s-curve.5axis": {
+      "movements": 55287,
+      "layers": 268,
+      "extrusionMovements": 51440,
+      "maximumNozzleNormalErrorDegrees": 2.7415778594196377e-13,
+      "maximumProfilePlaneErrorMm": 5.94028298772642e-13,
+      "aRangeDegrees": [
+        -61.57947674788853,
+        61.5671578385364
+      ],
+      "secondAxisRangeDegrees": [
+        -172.75762533084406,
+        72.17374781828791
+      ],
+      "depositionCoverage": 0.9764624437521634,
+      "depositionViolations": 906,
+      "collisionValidated": false,
+      "exportable": false
+    }
+  },
+  "nativeFirmwareValidated": false,
+  "physicalPrintingValidated": false
+}

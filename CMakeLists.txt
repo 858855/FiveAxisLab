@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(FiveAxisLab VERSION 0.3.1 LANGUAGES C CXX)
+project(FiveAxisLab VERSION 0.3.2 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Compatibility for pinned upstream releases")
@@ -40,7 +40,7 @@ find_library(TETGEN_LIBRARY NAMES tet tetgen REQUIRED)
 add_library(fiveaxis_core STATIC
  src/core/types.cpp src/core/geometry.cpp src/core/step_import.cpp
  src/core/stress.cpp src/core/slicing.cpp src/core/collision.cpp
- src/core/controllers.cpp src/core/project.cpp src/core/orca_adapter.cpp src/core/process.cpp src/core/motion_preview.cpp)
+ src/core/controllers.cpp src/core/project.cpp src/core/orca_adapter.cpp src/core/process.cpp src/core/motion_preview.cpp src/core/profile.cpp)
 target_include_directories(fiveaxis_core PUBLIC src ${OpenCASCADE_INCLUDE_DIR} vendor/fcl/include
  "${CMAKE_CURRENT_BINARY_DIR}/vendor/fcl/include" vendor/ompl/src "${CMAKE_CURRENT_BINARY_DIR}/vendor/ompl/src")
 target_link_libraries(fiveaxis_core PUBLIC Qt6::Core Eigen3::Eigen fcl ompl PRIVATE

@@ -7,6 +7,7 @@
 #include "core/step_import.h"
 #include "core/stress.h"
 #include "core/motion_preview.h"
+#include "core/profile.h"
 #include <QFile>
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
@@ -18,6 +19,35 @@ using namespace fiveaxis;
 class CoreTests : public QObject {
     Q_OBJECT
   private Q_SLOTS:
+    void profile_normal_slicing_data(){QTest::addColumn<bool>("head");QTest::newRow("bed")<<false;QTest::newRow("head")<<true;}
+    void profile_normal_slicing(){
+        QFETCH(bool,head);auto p=spiral_profile_project(head?Layout::TiltingHead:Layout::RotaryBed);
+        p.process.layerHeight=1.5;p.process.width=1.6;p.process.wallCount=1;p.process.infill=.2;try{slice_project(p);}catch(const std::exception &e){QFAIL(e.what());}
+        QVERIFY(p.path.size()>100);QCOMPARE(profile_motion_violation(p),-1);double minimum=1,maximum=0;int extruding=0;
+        for(size_t i=1;i<p.path.size();++i)if(p.path[i].deltaE>0){++extruding;auto section=profile_layer(p,p.path[i].layer);minimum=std::min(minimum,p.path[i].direction.dot(section.normal));maximum=std::max(maximum,std::abs(p.path[i].joint.a));
+            auto q=simulation_at(p,(p.path[i-1].time+p.path[i].time)/2,false).joint;QVERIFY((part_direction(p.machine,p.active_toolhead(),q)-section.normal).norm()<1e-6);
+        }
+        QVERIFY(extruding>50);QVERIFY(minimum>1-1e-10);QVERIFY(maximum>10*pi/180);
+        QTemporaryDir dir;save_project(p,dir.filePath("profile.5axis"));auto loaded=load_project(dir.filePath("profile.5axis"));QCOMPARE(loaded.fingerprint(),p.fingerprint());QCOMPARE(profile_motion_violation(loaded),-1);
+        for(auto &s:p.path)if(s.deltaE>0){s.joint.a+=.1;break;}
+        QVERIFY(profile_motion_violation(p)>=0);QCOMPARE(validate_motion(p).status,Status::Unresolved);
+        p.report.status=Status::Clear;p.report.fingerprint=p.fingerprint();p.depositionValid=true;QVERIFY_EXCEPTION_THROWN(export_gcode(p),std::runtime_error);
+    }
+    void profile_guide_validation(){
+        QVERIFY_EXCEPTION_THROWN(validate_profile_guide({}),std::runtime_error);
+        std::vector<ProfileStation> guide{{Vec3::Zero(),Vec3::UnitZ()},{Vec3(0,0,4),Vec3::UnitZ()}};validate_profile_guide(guide);QCOMPARE(profile_length(guide),4.0);
+        QVERIFY((profile_section(guide,2).center-Vec3(0,0,2)).norm()<1e-10);guide.back().normal=-Vec3::UnitZ();QVERIFY_EXCEPTION_THROWN(validate_profile_guide(guide),std::runtime_error);
+        QTemporaryDir dir;QFile file(dir.filePath("guide.json"));QVERIFY(file.open(QIODevice::WriteOnly));file.write("{\"stations\":[{\"center\":[0,0,0],\"normal\":[0,0,1]},{\"center\":[0,0,4],\"normal\":[0,0,2]}]}");file.close();
+        auto placed=import_profile_guide(file.fileName(),translation(Vec3(3,2,1))*rotation_y(.2));QVERIFY((placed.front().center-Vec3(3,2,1)).norm()<1e-10);QVERIFY((placed.front().normal-rotation_y(.2).linear()*Vec3::UnitZ()).norm()<1e-10);
+        auto p=spiral_profile_project(Layout::RotaryBed);p.profileGuide.clear();QVERIFY_EXCEPTION_THROWN(slice_project(p),std::runtime_error);
+    }
+    void mounted_axis_kinematics(){
+        for(auto layout:{Layout::RotaryBed,Layout::TiltingHead})for(auto axis:{Vec3::UnitZ().eval(),Vec3::UnitY().eval()}) {
+            MachineProfile m;m.layout=layout;ToolheadAssembly t;t.mount=translation(Vec3(2,1,3))*rotation_y(.12)*rotation_z(.07);t.axis=axis;t.tcp=Vec3(.4,.2,-1);
+            JointState known;known.a=.2;known.b=-.3;known.xyz=Vec3(12,7,30);Vec3 point=part_position(m,known),normal=part_direction(m,t,known);
+            auto solutions=inverse_kinematics(m,point,normal,known,t);QVERIFY(!solutions.empty());QVERIFY((part_direction(m,t,solutions.front())-normal).norm()<1e-9);QVERIFY((part_position(m,solutions.front())-point).norm()<1e-9);
+        }
+    }
     void kinematics();
     void thin_obstacle();
     void rotary_sweep();

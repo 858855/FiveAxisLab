@@ -2,6 +2,7 @@
 #include "core/geometry.h"
 #include "core/stress.h"
 #include "core/motion_preview.h"
+#include "core/profile.h"
 #include <QMouseEvent>
 #include <QOpenGLBuffer>
 #include <QPainter>
@@ -34,6 +35,7 @@ Viewport::Viewport(QWidget *parent) : QOpenGLWidget(parent) {
     setFocusPolicy(Qt::StrongFocus);
     visibleRoles.fill(true);
     hud = new QLabel(this);
+    hud->setObjectName("simulationHud");
     hud->setAttribute(Qt::WA_TransparentForMouseEvents);
     hud->setStyleSheet("background:rgba(255,255,255,220);color:#394345;font-size:12px;padding:7px;border-radius:3px;");
     hud->move(24, 20);
@@ -180,6 +182,12 @@ void Viewport::set_time(double t) {
                                   ? "Collision detected · export blocked"
                                   : "Validation pending / unresolved"));
         if(project->useDummyToolhead) hud->setText(hud->text()+"\nDUMMY TOOLHEAD · synthetic geometry only");
+        if(project->process.profileNormal && !project->profileGuide.empty() && !project->path.empty()) {
+            const auto &sample=project->path[std::clamp(state.move,0,int(project->path.size())-1)];
+            auto normal=profile_layer(*project,sample.layer).normal;
+            double error=std::acos(std::clamp(part_direction(project->machine,project->active_toolhead(),state.joint).dot(normal),-1.0,1.0))*180/pi;
+            hud->setText(hud->text()+(sample.deltaE>0?QString("\nPROFILE NORMAL · error %1°").arg(error,0,'f',4):"\nPROFILE NORMAL · travel orientation transition"));
+        }
         if(project->deposition.checked && !project->deposition.unsupportedMoves.empty())
             hud->setText(hud->text()+QString("\n%1 deposition violations · marked red").arg(project->deposition.unsupportedMoves.size()));
         if(prepare) hud->setText("PREPARE\nImport a part, choose your machine and process, then slice.\nGrid spacing: 10 mm · Physical bed defined in Machine setup");
@@ -426,6 +434,18 @@ void Viewport::paintGL() {
         if (event.move == state.move)
             draw_mesh(marker, translation(event.contact), QVector4D(1, .16, .30, 1));
     draw_rotary_axes();
+    if(project->process.profileNormal && !project->profileGuide.empty() && !prepare && !project->path.empty()) {
+        const auto &sample=project->path[std::clamp(state.move,0,int(project->path.size())-1)];
+        auto section=profile_layer(*project,sample.layer);double radius=0;
+        for(const auto &s:project->path)if(s.layer==sample.layer && s.deltaE>0 && s.role!=Role::Support)radius=std::max(radius,(s.position-section.center).norm());
+        Transform plane=translation(section.center);plane.linear()=Eigen::Quaterniond::FromTwoVectors(Vec3::UnitZ(),section.normal).toRotationMatrix();
+        Transform scale=Transform::Identity();scale.linear()*=std::max(1.0,radius+.3);
+        draw_mesh(rotaryRing,bed*plane*scale,QVector4D(.62,.23,.8,1));
+        Vec3 axis=part_direction(project->machine,project->active_toolhead(),state.joint);
+        Transform pointer=translation(part_position(project->machine,state.joint)+axis*3);
+        pointer.linear()=Eigen::Quaterniond::FromTwoVectors(Vec3::UnitZ(),axis).toRotationMatrix()*Eigen::DiagonalMatrix<double,3>(.18,.18,6);
+        draw_mesh(unitBox,bed*pointer,QVector4D(.05,.8,.25,1));
+    }
     painter.endNativePainting();
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setPen(QColor("#535e64"));

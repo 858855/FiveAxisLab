@@ -1,6 +1,7 @@
 #include "controllers.h"
 #include "collision.h"
 #include "project.h"
+#include "profile.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QRegularExpression>
@@ -20,6 +21,7 @@ double feed_metric(const MachineProfile &m, const JointState &a, const JointStat
     return std::max(std::hypot(da, db), std::abs(deltaE));
 }
 QString export_gcode(const Project &p) {
+    if(p.process.profileNormal && profile_motion_violation(p)>=0)throw std::runtime_error("Export blocked: nozzle is not perpendicular to the profile");
     if (!p.report.exportable() || p.report.fingerprint != p.fingerprint())
         throw std::runtime_error("Export blocked: validate the current geometry, machine, and motion first");
     if (!p.depositionValid)

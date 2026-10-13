@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuite name="CoreTests" timestamp="2026&#x002D;10&#x002D;13T10:26:06" hostname="sven" tests="49" failures="0" errors="0" skipped="0" time="3.522">
+  <properties>
+    <property name="QTestVersion" value="6.11.2"/>
+    <property name="QtVersion" value="6.11.2"/>
+    <property name="QtBuild" value="Qt 6.11.2 (x86_64&#x002D;little_endian&#x002D;llp64 shared (dynamic) release build; by GCC 16.2.0)"/>
+  </properties>
+  <testcase name="initTestCase" classname="CoreTests" time="0.000"/>
+  <testcase name="profile_normal_slicing(bed)" classname="CoreTests" time="0.426"/>
+  <testcase name="profile_normal_slicing(head)" classname="CoreTests" time="0.407"/>
+  <testcase name="profile_guide_validation" classname="CoreTests" time="0.003"/>
+  <testcase name="mounted_axis_kinematics" classname="CoreTests" time="0.000"/>
+  <testcase name="kinematics" classname="CoreTests" time="0.000"/>
+  <testcase name="thin_obstacle" classname="CoreTests" time="0.000"/>
+  <testcase name="rotary_sweep" classname="CoreTests" time="0.000"/>
+  <testcase name="containment" classname="CoreTests" time="0.000"/>
+  <testcase name="deposited_only" classname="CoreTests" time="0.000"/>
+  <testcase name="tip_contact_and_heater" classname="CoreTests" time="0.002"/>
+  <testcase name="fea_patch" classname="CoreTests" time="0.000"/>
+  <testcase name="vtu_tensors" classname="CoreTests" time="0.008"/>
+  <testcase name="vtu_components_and_mismatch" classname="CoreTests" time="0.014"/>
+  <testcase name="step_roundtrip" classname="CoreTests" time="0.087"/>
+  <testcase name="malformed_step" classname="CoreTests" time="0.003"/>
+  <testcase name="project_roundtrip_and_stale_export" classname="CoreTests" time="0.012"/>
+  <testcase name="simulation_backward" classname="CoreTests" time="0.000"/>
+  <testcase name="controller_replay" classname="CoreTests" time="0.009"/>
+  <testcase name="scalar_field_slice" classname="CoreTests" time="0.024"/>
+  <testcase name="blocked_repair" classname="CoreTests" time="0.001"/>
+  <testcase name="stale_kinematics" classname="CoreTests" time="0.000"/>
+  <testcase name="clearance_threshold" classname="CoreTests" time="0.000"/>
+  <testcase name="successful_travel_repair" classname="CoreTests" time="0.050"/>
+  <testcase name="quadratic_tetra_mapping" classname="CoreTests" time="0.000"/>
+  <testcase name="step_units" classname="CoreTests" time="0.090"/>
+  <testcase name="curved_strength_layers" classname="CoreTests" time="0.100"/>
+  <testcase name="playback_invariance" classname="CoreTests" time="0.001"/>
+  <testcase name="unsupported_deposition" classname="CoreTests" time="0.000"/>
+  <testcase name="nozzle_lift_and_penetration" classname="CoreTests" time="0.003"/>
+  <testcase name="successful_orientation_repair" classname="CoreTests" time="0.105"/>
+  <testcase name="cavity_meshing" classname="CoreTests" time="0.001"/>
+  <testcase name="rotary_lever_bound" classname="CoreTests" time="0.000"/>
+  <testcase name="unresolved_budget" classname="CoreTests" time="0.012"/>
+  <testcase name="head_motor_interpolation" classname="CoreTests" time="0.000"/>
+  <testcase name="conical_nozzle_contact" classname="CoreTests" time="0.001"/>
+  <testcase name="bounded_interface" classname="CoreTests" time="0.000"/>
+  <testcase name="fem_step_metadata" classname="CoreTests" time="0.013"/>
+  <testcase name="orca_process_import" classname="CoreTests" time="0.000"/>
+  <testcase name="process_roles_and_patterns" classname="CoreTests" time="0.096"/>
+  <testcase name="reduced_and_disabled_supports" classname="CoreTests" time="1.155"/>
+  <testcase name="dummy_toolhead_roundtrip_and_collision" classname="CoreTests" time="0.182"/>
+  <testcase name="toolpaths_follow_joint_motion" classname="CoreTests" time="0.000"/>
+  <testcase name="workspace_settings_geometry" classname="CoreTests" time="0.298"/>
+  <testcase name="workspace_preset_import" classname="CoreTests" time="0.000"/>
+  <testcase name="step_tessellation_options" classname="CoreTests" time="0.341"/>
+  <testcase name="rotary_preview_calibration" classname="CoreTests" time="0.000"/>
+  <testcase name="axis_motion_demonstrations" classname="CoreTests" time="0.070"/>
+  <testcase name="cleanupTestCase" classname="CoreTests" time="0.000"/>
+</testsuite>

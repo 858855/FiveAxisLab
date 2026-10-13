@@ -1,6 +1,7 @@
 #include "project.h"
 #include "geometry.h"
 #include "process.h"
+#include "profile.h"
 #include <QCryptographicHash>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -273,8 +274,8 @@ QJsonObject project_json(const Project &p) {
                            {"coverage", p.deposition.coverage},
                            {"unsupported", unsupported},
                            {"dependencies", dependencies}};
-    return {{"schema", 1},
-            {"engineRevision", "0.3.0-workspace-process-1"},
+    QJsonObject result{{"schema", 1},
+            {"engineRevision", p.process.profileNormal?"0.3.2-profile-normal-1":"0.3.0-workspace-process-1"},
             {"deposition", deposition},
             {"part", mesh_json(p.part)},
             {"partPlacement", matrix(p.partPlacement)},
@@ -294,11 +295,20 @@ QJsonObject project_json(const Project &p) {
             {"report", report},
             {"diagnostics", QJsonArray::fromStringList(p.diagnostics)},
             {"depositionValid", p.depositionValid}};
+    if(!p.profileGuide.empty()) {
+        QJsonArray guide;for(const auto &station:p.profileGuide)guide.append(QJsonObject{{"center",vec(station.center)},{"normal",vec(station.normal)}});
+        result["profileGuide"]=guide;
+    }
+    return result;
 }
 Project project_from_json(const QJsonObject &j) {
     if (j["schema"].toInt() != 1)
         throw std::runtime_error("Unsupported project schema");
     Project p;
+    for(auto entry:j["profileGuide"].toArray()) {
+        auto station=entry.toObject();p.profileGuide.push_back({vec(station["center"]),vec(station["normal"])});
+    }
+    if(!p.profileGuide.empty())validate_profile_guide(p.profileGuide);
     auto deposition = j["deposition"].toObject();
     p.deposition.checked = deposition["checked"].toBool();
     p.deposition.coverage = deposition["coverage"].toDouble();
