@@ -40,6 +40,7 @@ bool import_step_dialog(QWidget *parent,const QString &file,ToolheadAssembly &as
     auto facets=new QLabel("Reading STEP…"); facets->setWordWrap(true); facets->setMinimumHeight(56); facets->setObjectName("stepFacetCount"); panel->addWidget(facets);
     auto tree=new QTreeWidget; tree->setHeaderLabels({"Component","Collision facets"}); tree->setMinimumWidth(360); tree->header()->setSectionResizeMode(QHeaderView::ResizeToContents); panel->addWidget(tree,1);
     auto view=new Viewport; view->setMinimumSize(500,400); horizontal->addWidget(view,1);
+    view->set_rotary_axes_visible(false);
     auto buttons=new QDialogButtonBox(QDialogButtonBox::Ok|QDialogButtonBox::Cancel); panel->addWidget(buttons); buttons->button(QDialogButtonBox::Ok)->setEnabled(false);
     QFutureWatcher<Result> worker; auto token=std::make_shared<std::atomic_bool>(false); bool dirty=false;
     std::function<void()> build=[&] {

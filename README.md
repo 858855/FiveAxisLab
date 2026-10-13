@@ -8,6 +8,8 @@ Extract the locally packaged `dist/FiveAxisLab-0.3.0-win64.zip` and run `FiveAxi
 
 ![Windows simulation with toolpaths](examples/reports/workspace-preview.png)
 
+Version 0.3.1 adds **Preview → Axis behavior**. Follow the recorded toolpath angles, drag **Manual tilt / roll** controls, or select **Animated tilt / roll**. Rotary-bed A/C and tilting-head A/B use calibrated pivots, link attachments and TCP compensation; rings mark the actual axis locations. Manual/animated poses pause the deposited prefix, preserve the project and disable export. **Simulation → Open rotary-bed / tilting-head axis demonstration** opens a synthetic, non-printing sweep with coordinated XYZ and rotary motion. See [axis preview controls](docs/AXIS_PREVIEW.md).
+
 Version 0.3 adds the Orca-style **Prepare / Preview** workspace, an inline **Quality / Strength / Speed / Support / Other** sidebar, settings search, a screenshot-reference preset, filament/time/cost estimates, layer-range sliders and bead/path visibility by line type. New settings generate real surface patterns, shell thicknesses, alternating walls, compensation, speed limits, skirts and brims. STEP import has live linear/angular tessellation controls and a component/facet preview. [Implemented and unavailable controls](docs/WORKSPACE.md) lists the exact boundary; scarf, tree support, ironing, multi-material and full Orca engine integration remain outstanding.
 
 Version 0.2 adds **Toolpaths → Full job / Up to nozzle / Current layer**, travel and deposited-material visibility controls, and role colors for outer walls, inner walls, infill, solid fill and supports. **Generate with dummy toolhead** uses synthetic collision geometry while retaining the imported STEP assembly. **Process settings · Orca options** exposes widths, wall order, shell layers, infill patterns, seam placement, speeds and Z hop. Select **Normal / Reduced / No supports**; unsupported deposition remains checked. [Supported controls and Orca preset import](docs/PROCESS_SETTINGS.md).
@@ -59,9 +61,13 @@ Native Klipper batch testing uses WSL/Linux with GCC, Make, Python and the pinne
 ./fiveaxis_cli.exe --validate reference.5axis --klipper --replay --gcode klipper.gcode
 ./fiveaxis_cli.exe --validate reference.5axis --head --profile head.5machine
 ./fiveaxis_cli.exe --slice part.stl --dummy-toolhead --orca-process process.json --supports reduced --output preview.5axis --plan-only
+./fiveaxis_cli.exe --axis-demo bed --output axes-bed.5axis
+./fiveaxis_cli.exe --axis-demo head --output axes-head.5axis
 ```
 
 Exit 0 means the selected motion passes configured geometry checks; 2 means collision / unresolved; 1 means input or operation failure. Export is blocked independently when deposition planning is incomplete. Source-CAD hashes, collision tolerances, settings, FEM, placements, machine bodies, paths and reports round-trip in a `.5axis` ZIP project.
+
+`--axis-demo` exits 0 when the non-printing preview project is saved. It does not run validation or authorize export.
 
 For an intended articulated assembly interface, enter `first component id | second component id | CAD center x,y,z | box size x,y,z` in Machine setup. The box is expressed in the first component's CAD frame and exempts only that component's bounded interface region against the named partner. Containment outside the box and other component pairs remain checked. IDs are displayed in the component table. Empty interface settings permit only the rigid overlaps of components assigned to the same link.
 

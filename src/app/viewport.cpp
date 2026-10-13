@@ -1,6 +1,7 @@
 #include "viewport.h"
 #include "core/geometry.h"
 #include "core/stress.h"
+#include "core/motion_preview.h"
 #include <QMouseEvent>
 #include <QOpenGLBuffer>
 #include <QPainter>
@@ -51,6 +52,14 @@ Viewport::Viewport(QWidget *parent) : QOpenGLWidget(parent) {
     update_path_legend();
     unitBox = box_mesh(Vec3::Zero(), Vec3::Ones());
     marker = box_mesh(Vec3::Zero(), Vec3(.7, .7, .7));
+    for(int i=0;i<64;++i){
+        double angle=(i+.5)*2*pi/64;Transform tr=translation(Vec3(std::cos(angle),std::sin(angle),0));
+        tr.linear()=Eigen::AngleAxisd(angle+pi/2,Vec3::UnitZ()).toRotationMatrix();
+        auto segment=box_mesh(Vec3::Zero(),Vec3(2*pi/64,.018,.018));int offset=int(rotaryRing.vertices.size());
+        for(auto v:segment.vertices)rotaryRing.vertices.push_back(tr*v);
+        for(auto face:segment.triangles)rotaryRing.triangles.push_back(face+Eigen::Vector3i::Constant(offset));
+    }
+    for(int i=0;i<2;++i){rotaryLabels[i]=new QLabel(this);rotaryLabels[i]->setAttribute(Qt::WA_TransparentForMouseEvents);rotaryLabels[i]->setStyleSheet("background:rgba(255,255,255,220);font-size:9pt;padding:3px;");rotaryLabels[i]->hide();}
 }
 Viewport::~Viewport() {
     if (isValid())
@@ -69,6 +78,7 @@ void Viewport::set_project(const Project *p) {
     if (isValid())
         doneCurrent();
     project = p;
+    axisOverride=false;
     pathSegments = p ? simulation_toolpaths(*p) : std::vector<ToolpathSegment>{};
     layerRanges.clear();
     for(size_t i=0;i<pathSegments.size();) {
@@ -139,6 +149,7 @@ void Viewport::set_time(double t) {
     time = t;
     if (project)
         state = simulation_at(*project, t, false);
+    if(axisOverride)state.joint=axisJoint;
     if (project) {
         auto axes = controller_axes(project->machine, project->active_toolhead(), state.joint);
         double flow = 0;
@@ -172,11 +183,16 @@ void Viewport::set_time(double t) {
         if(project->deposition.checked && !project->deposition.unsupportedMoves.empty())
             hud->setText(hud->text()+QString("\n%1 deposition violations · marked red").arg(project->deposition.unsupportedMoves.size()));
         if(prepare) hud->setText("PREPARE\nImport a part, choose your machine and process, then slice.\nGrid spacing: 10 mm · Physical bed defined in Machine setup");
+        else if(axisOverride)hud->setText(QString("AXIS POSE PREVIEW · %1\nA %2° · %3 %4°\nCarriage XYZ %5, %6, %7 mm\nNo extrusion · Collision validation not run for this pose")
+            .arg(project->machine.layout==Layout::RotaryBed?"Tilting / rotating bed":"Tilting / rolling toolhead")
+            .arg(state.joint.a*180/pi,0,'f',1).arg(project->machine.axis2()).arg(state.joint.b*180/pi,0,'f',1)
+            .arg(axes.xyz.x(),0,'f',2).arg(axes.xyz.y(),0,'f',2).arg(axes.xyz.z(),0,'f',2));
         hud->adjustSize();
         hud->raise();
     }
     update();
 }
+void Viewport::set_axis_pose(const JointState &q,bool enabled){axisJoint=q;axisOverride=enabled;set_time(time);}
 void Viewport::set_stress(bool v) {
     stressVisible = v;
     if (isValid())
@@ -212,10 +228,19 @@ void Viewport::set_selected(const std::set<int> &a, const std::set<int> &b) {
 void Viewport::fit() {
     if (!project)
         return;
-    Eigen::AlignedBox3d b = project->part.bounds();
+    Eigen::AlignedBox3d b;
+    auto bed=workpiece_pose(project->machine,prepare?JointState{}:state.joint);
+    for(const auto &v:project->part.vertices)b.extend(bed*v);
     for (auto &c : project->active_toolhead().components) {
         auto pose=component_pose(project->machine,project->active_toolhead(),c,state.joint);
         for(auto& v:c.mesh.vertices)b.extend(pose*v);
+    }
+    if(!prepare && rotaryAxesVisible) {
+        double extent=(project->machine.layout==Layout::RotaryBed?30:12)*1.4;
+        for(const auto &frame:rotary_axis_frames(project->machine,project->active_toolhead(),state.joint)) {
+            b.extend(frame.translation()-Vec3::Constant(extent));
+            b.extend(frame.translation()+Vec3::Constant(extent));
+        }
     }
     if (!b.isEmpty()) {
         target = b.center();
@@ -383,7 +408,7 @@ void Viewport::paintGL() {
     }
     if(!prepare && toolheadVisible) for (auto &c : project->active_toolhead().components) {
         QVector4D color = c.nozzle ? QVector4D(.95, .70, .23, 1) : QVector4D(.55, .61, .72, 1);
-        for (auto &e : project->report.events)
+        if(!axisOverride)for (auto &e : project->report.events)
             if (e.move == state.move &&
                 (e.first == c.name || e.second == c.name || e.first == c.name + " [" + c.id + "]" ||
                  e.second == c.name + " [" + c.id + "]"))
@@ -397,9 +422,10 @@ void Viewport::paintGL() {
     draw_mesh(fixedMesh, bed, QVector4D(.23, .55, 1, .85));
     draw_mesh(loadedMesh, bed, QVector4D(1, .40, .24, .85));
     if(!prepare) draw_paths(bed);
-    for (auto &event : project->report.events)
+    if(!axisOverride)for (auto &event : project->report.events)
         if (event.move == state.move)
             draw_mesh(marker, translation(event.contact), QVector4D(1, .16, .30, 1));
+    draw_rotary_axes();
     painter.endNativePainting();
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setPen(QColor("#535e64"));
@@ -412,6 +438,26 @@ void Viewport::paintGL() {
     painter.setPen(QColor("#159941")); painter.drawText(origin+QPoint(-23,-20),"Y");
     painter.setPen(QColor("#345aca")); painter.drawText(origin+QPoint(-4,-44),"Z");
 
+}
+void Viewport::draw_rotary_axes(){
+    for(auto label:rotaryLabels)label->hide();
+    if(!project || prepare || !rotaryAxesVisible)return;
+    auto frames=rotary_axis_frames(project->machine,project->active_toolhead(),state.joint);
+    double radius=project->machine.layout==Layout::RotaryBed?30:12;
+    const QVector4D colors[]={QVector4D(.9,.2,.3,1),QVector4D(.08,.55,.82,1)};
+    for(int i=0;i<2;++i){
+        Transform scale=Transform::Identity();scale.linear()*=radius;
+        draw_mesh(rotaryRing,frames[i]*scale,colors[i]);
+        Transform stem=translation(Vec3(0,0,0));stem.linear().diagonal()=Vec3(.4,.4,radius*2.4);
+        draw_mesh(unitBox,frames[i]*stem,colors[i]);
+        double angle=i==0?state.joint.a:state.joint.b;
+        Transform pointer=rotation_z(angle)*translation(Vec3(radius/2,0,0));pointer.linear()*=Eigen::DiagonalMatrix<double,3>(radius,.6,.6);
+        draw_mesh(unitBox,frames[i]*pointer,colors[i]);
+        auto point=frames[i]*Vec3(0,0,radius*1.3);auto clip=view_projection()*QVector4D(point.x(),point.y(),point.z(),1);
+        if(clip.w()<=0)continue;auto ndc=clip/clip.w();int x=int((ndc.x()+1)*width()/2),y=int((1-ndc.y())*height()/2);
+        auto label=rotaryLabels[i];label->setText(QString("%1 · %2°").arg(i==0?"A":project->machine.axis2()).arg(angle*180/pi,0,'f',1));label->adjustSize();
+        if(x>=0 && x+label->width()<width() && y>=0 && y+label->height()<height()){label->move(x,y);label->show();label->raise();}
+    }
 }
 static Vec3 path_color(Role role) {
     auto c=toolpath_color(role); return Vec3(c.redF(),c.greenF(),c.blueF());

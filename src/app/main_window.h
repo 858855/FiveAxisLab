@@ -2,6 +2,7 @@
 #include "core/types.h"
 #include "viewport.h"
 #include "process_editor.h"
+#include "axis_preview.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -42,6 +43,7 @@ class MainWindow : public QMainWindow {
     QTextEdit *log;
     QProgressBar *progress;
     QSlider *timeline;
+    AxisPreview *axisPreview;
     ProcessEditor *processEditor;
     QTabBar *workspaces;
     QTableWidget *roleStatistics;
@@ -52,6 +54,7 @@ class MainWindow : public QMainWindow {
     QDoubleSpinBox *filamentDensity,*filamentCost;
     QPushButton *sliceButton,*exportButton;
     bool updatingPreview=false;
+    bool motionValidated=false;
     int lastPreviewMove=-1;
     QTimer timer;
     QElapsedTimer elapsed;
@@ -82,4 +85,5 @@ class MainWindow : public QMainWindow {
     void refresh_preview(bool preserveRange=false);
     void update_move_preview();
     void set_workspace(int index);
+    void update_axis_pose(const fiveaxis::JointState &pose,bool overrideMotion);
 };

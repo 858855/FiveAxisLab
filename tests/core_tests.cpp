@@ -6,6 +6,7 @@
 #include "core/slicing.h"
 #include "core/step_import.h"
 #include "core/stress.h"
+#include "core/motion_preview.h"
 #include <QFile>
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
@@ -58,7 +59,41 @@ class CoreTests : public QObject {
     void workspace_settings_geometry();
     void workspace_preset_import();
     void step_tessellation_options();
+    void rotary_preview_calibration();
+    void axis_motion_demonstrations();
 };
+void CoreTests::rotary_preview_calibration(){
+    MachineProfile m;m.bedPivot=Vec3(3,-4,7);m.headPivotA=Vec3(2,-3,28);m.headPivotB=Vec3(4,2,16);
+    ToolheadAssembly t;t.tcp=Vec3(1,2,-1);t.mount=translation(Vec3(3,-2,5))*rotation_z(.23);
+    Vec3 anchor(18,11,32);
+    for(auto layout:{Layout::RotaryBed,Layout::TiltingHead}){
+        m.layout=layout;auto q=rotary_preview_pose(m,anchor,.4,-.6);auto axes=rotary_axis_frames(m,t,q);
+        QVERIFY((part_position(m,q)-anchor).norm()<1e-9);
+        Component nozzle;nozzle.link=Link::Nozzle;QVERIFY((component_pose(m,t,nozzle,q)*t.tcp-q.xyz).norm()<1e-9);
+        for(const auto &frame:axes){QVERIFY(std::abs(frame.linear().determinant()-1)<1e-9);QVERIFY((frame.linear().transpose()*frame.linear()-Mat3::Identity()).norm()<1e-9);}
+        QVERIFY((axes[0].linear().col(2)-Vec3::UnitX()).norm()<1e-9);
+        if(layout==Layout::RotaryBed){
+            QVERIFY((axes[0].translation()-m.bedPivot).norm()<1e-9);QVERIFY((axes[1].translation()-m.bedPivot).norm()<1e-9);
+            QVERIFY((axes[1].linear().col(2)-rotation_x(q.a).linear()*Vec3::UnitZ()).norm()<1e-9);
+        }else{
+            auto carriage=controller_axes(m,t,q).xyz;auto a=translation(m.headPivotA)*rotation_x(q.a)*translation(-m.headPivotA);
+            QVERIFY((axes[0].translation()-carriage-m.headPivotA).norm()<1e-9);
+            QVERIFY((axes[1].translation()-carriage-a*m.headPivotB).norm()<1e-9);
+            QVERIFY((axes[1].linear().col(2)-a.linear()*Vec3::UnitY()).norm()<1e-9);
+        }
+    }
+}
+void CoreTests::axis_motion_demonstrations(){
+    QTemporaryDir dir;
+    for(auto layout:{Layout::RotaryBed,Layout::TiltingHead}){
+        auto p=axis_motion_demo(layout);QVERIFY(p.path.size()>100);bool tilt=false,rotation=false;
+        for(const auto &s:p.path){QCOMPARE(s.deltaE,0.0);QCOMPARE(s.role,Role::Travel);QVERIFY(in_limits(p.machine,p.active_toolhead(),s.joint));tilt|=std::abs(s.joint.a)>.4;rotation|=std::abs(s.joint.b)>.5;}
+        QVERIFY(tilt && rotation);QVERIFY(!p.report.exportable());QVERIFY(!p.depositionValid);QVERIFY_EXCEPTION_THROWN(export_gcode(p),std::runtime_error);
+        auto file=dir.filePath(layout==Layout::RotaryBed?"bed.5axis":"head.5axis");save_project(p,file);auto loaded=load_project(file);QCOMPARE(loaded.fingerprint(),p.fingerprint());
+        auto mid=simulation_at(loaded,loaded.path[loaded.path.size()/4].time,false);auto before=simulation_at(loaded,0,false);auto again=simulation_at(loaded,loaded.path[loaded.path.size()/4].time,false);
+        QVERIFY(std::abs(mid.joint.a-before.joint.a)>.3);QVERIFY(std::abs(mid.joint.b-before.joint.b)>.3);QVERIFY((mid.joint.xyz-again.joint.xyz).norm()<1e-9);
+    }
+}
 void CoreTests::workspace_preset_import() {
     QStringList notes;
     auto s=import_orca_process({{"top_surface_line_width","0.5"},{"support_line_width","0.6"},

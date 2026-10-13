@@ -3,6 +3,8 @@
 #include "core/project.h"
 #include "app/step_dialog.h"
 #include "core/step_import.h"
+#include "core/motion_preview.h"
+#include "core/collision.h"
 #include <QPushButton>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -17,6 +19,39 @@ using namespace fiveaxis;
 class DesktopTests : public QObject {
     Q_OBJECT
   private Q_SLOTS:
+    void rotary_axis_preview_data(){QTest::addColumn<bool>("head");QTest::newRow("rotary-bed")<<false;QTest::newRow("tilting-head")<<true;}
+    void rotary_axis_preview(){
+        QFETCH(bool,head);Project p;p.machine.layout=head?Layout::TiltingHead:Layout::RotaryBed;p.machine.minB=head?-75*pi/180:-pi;p.machine.maxB=-p.machine.minB;
+        Component nozzle;nozzle.id=nozzle.name="Preview nozzle";nozzle.nozzle=true;nozzle.mesh=cylinder_mesh(Vec3(0,0,1),.3,2);p.toolhead.components.push_back(nozzle);
+        p.part=box_mesh(Vec3(0,0,3),Vec3(12,8,6));
+        for(auto angle:{std::make_pair(0.0,0.0),std::make_pair(25.0,35.0),std::make_pair(-10.0,-15.0)}){
+            Sample s;s.joint=rotary_preview_pose(p.machine,Vec3(12,7,30),angle.first*pi/180,angle.second*pi/180);s.position=part_position(p.machine,s.joint);s.direction=part_direction(p.machine,p.active_toolhead(),s.joint);s.role=Role::Travel;p.path.push_back(s);
+        }
+        time_path(p);p.depositionValid=true;p.report=validate_motion(p);QVERIFY(p.report.exportable());
+        QTemporaryDir dir;auto file=dir.filePath("axes.5axis");save_project(p,file);MainWindow window;window.load(file);window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto view=window.findChild<Viewport*>("simulationViewport");auto source=window.findChild<QComboBox*>("axisPreviewSource");
+        auto a=window.findChild<QDoubleSpinBox*>("previewAxisA"),b=window.findChild<QDoubleSpinBox*>("previewAxisB");auto slider=window.findChild<QSlider*>("moveTimeline");auto exportButton=window.findChild<QPushButton*>("exportGcode");
+        QVERIFY(view && source && a && b && exportButton);QVERIFY(exportButton->isEnabled());
+        slider->setValue(5000);auto planned=simulation_at(p,p.path.back().time*.5,false).joint;QVERIFY(!view->axis_pose_active());QVERIFY(std::abs(view->displayed_joint().a-planned.a)<1e-9);
+        auto fingerprint=window.current_project().fingerprint();auto before=view->grabFramebuffer();Vec3 anchor=part_position(p.machine,planned);
+        a->setValue(30);b->setValue(40);QVERIFY(view->axis_pose_active());QCOMPARE(source->currentIndex(),1);QVERIFY(!exportButton->isEnabled());
+        auto pose=view->displayed_joint();QVERIFY(std::abs(pose.a-pi/6)<1e-9);QVERIFY(std::abs(pose.b-40*pi/180)<1e-9);QVERIFY((part_position(p.machine,pose)-anchor).norm()<1e-9);
+        view->repaint();QVERIFY(view->grabFramebuffer()!=before);QCOMPARE(window.current_project().fingerprint(),fingerprint);
+        QVERIFY(window.findChild<QTextEdit*>("moveCodePreview")->toPlainText().contains("No generated G-code"));
+        source->setCurrentIndex(2);QTest::qWait(120);auto animated=view->displayed_joint();QTest::qWait(140);
+        QVERIFY(std::abs(animated.a-view->displayed_joint().a)>1e-4);QVERIFY(std::abs(animated.b-view->displayed_joint().b)>1e-4);QCOMPARE(window.current_project().fingerprint(),fingerprint);
+        slider->setValue(3000);QVERIFY(!view->axis_pose_active());QCOMPARE(source->currentIndex(),0);QVERIFY(exportButton->isEnabled());
+        auto expected=simulation_at(p,p.path.back().time*.3,false).joint;QVERIFY((view->displayed_joint().xyz-expected.xyz).norm()<1e-9);
+        a->setValue(30);b->setValue(40);auto shots=qEnvironmentVariable("FIVEAXIS_AXIS_SCREENSHOTS");
+        window.capture(dir.filePath("manual.png"));QVERIFY(view->axis_pose_active());QVERIFY(std::abs(view->displayed_joint().a-pi/6)<1e-9);
+        if(!shots.isEmpty()){QApplication::processEvents();window.grab().save(shots+(head?"/axes-head-manual.png":"/axes-bed-manual.png"));}
+        window.findChild<QPushButton*>("resetPreviewAxes")->click();QVERIFY(std::abs(view->displayed_joint().a)<1e-9);QVERIFY(std::abs(view->displayed_joint().b)<1e-9);
+        source->setCurrentIndex(0);QVERIFY(!view->axis_pose_active());QCOMPARE(window.current_project().fingerprint(),fingerprint);
+        p.path.resize(1);auto carriage=controller_axes(p.machine,p.toolhead,p.path.front().joint).xyz;
+        p.machine.minXYZ=carriage-Vec3::Constant(.01);p.machine.maxXYZ=carriage+Vec3::Constant(.01);p.invalidate();save_project(p,file);window.load(file);
+        a->setValue(30);QVERIFY(view->axis_pose_active());QVERIFY(std::abs(view->displayed_joint().a)<1e-9);
+        QVERIFY(window.findChild<QLabel*>("axisPreviewStatus")->text().contains("Carriage limit reached"));window.close();
+    }
     void inline_workspace_and_layer_filters() {
         MainWindow window; QTemporaryDir dir; auto p=demo_project(); p.path.clear(); p.part=box_mesh(Vec3(0,0,1),Vec3(6,6,2));
         Sample start; start.position=start.joint.xyz=Vec3(-2,-2,.2); p.path.push_back(start);

@@ -5,6 +5,7 @@
 #include <QVBoxLayout>
 #include <QGroupBox>
 #include <QSignalBlocker>
+#include <QScrollArea>
 #include <QTextCursor>
 #include <QTextCharFormat>
 #include <array>
@@ -15,14 +16,19 @@ static QString duration_text(double seconds) {
 static QString short_time(double seconds) {int n=int(std::round(seconds)); return n>=3600?QString::number(n/3600.0,'f',1)+"h":n>=60?QString::number(n/60.0,'f',1)+"m":QString::number(n)+"s";}
 QWidget *MainWindow::create_preview_inspector() {
     auto panel=new QWidget; panel->setObjectName("previewInspector"); panel->setFixedWidth(300);
-    auto outer=new QVBoxLayout(panel); outer->setContentsMargins(4,4,4,4); outer->setSpacing(5);
+    auto container=new QVBoxLayout(panel);container->setContentsMargins(0,0,0,0);
+    auto scroll=new QScrollArea;scroll->setWidgetResizable(true);scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);scroll->setFrameShape(QFrame::NoFrame);
+    auto contents=new QWidget;scroll->setWidget(contents);container->addWidget(scroll);
+    auto outer=new QVBoxLayout(contents); outer->setContentsMargins(4,4,4,4); outer->setSpacing(5);
     auto heading=new QLabel("Slicing result · line type"); heading->setStyleSheet("font-weight:600;"); outer->addWidget(heading);
+    axisPreview=new AxisPreview;outer->addWidget(axisPreview);
+    connect(axisPreview,&AxisPreview::pose_changed,this,&MainWindow::update_axis_pose);
     roleStatistics=new QTableWidget(role_count,5); roleStatistics->setObjectName("roleStatistics");
     roleStatistics->setHorizontalHeaderLabels({"Line type","Time","%","m","g"}); roleStatistics->verticalHeader()->hide(); roleStatistics->setShowGrid(false);
     roleStatistics->setEditTriggers(QAbstractItemView::NoEditTriggers); roleStatistics->setSelectionMode(QAbstractItemView::NoSelection);
     roleStatistics->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch); roleStatistics->horizontalHeader()->setSectionResizeMode(0,QHeaderView::Fixed); roleStatistics->setColumnWidth(0,112);
     roleStatistics->horizontalHeader()->setSectionResizeMode(1,QHeaderView::Fixed);roleStatistics->setColumnWidth(1,50);
-    roleStatistics->setMinimumHeight(255); roleStatistics->setMaximumHeight(340); outer->addWidget(roleStatistics);
+    roleStatistics->setMinimumHeight(110); roleStatistics->setMaximumHeight(240); outer->addWidget(roleStatistics);
     for(int r=0;r<role_count;++r) {
         auto item=new QTableWidgetItem(role_name(Role(r))); item->setFlags(Qt::ItemIsEnabled|Qt::ItemIsUserCheckable); item->setCheckState(Qt::Checked); item->setForeground(toolpath_color(Role(r)));
         roleStatistics->setItem(r,0,item); roleStatistics->setRowHeight(r,23);
@@ -34,7 +40,7 @@ QWidget *MainWindow::create_preview_inspector() {
     totals=new QLabel; totals->setObjectName("filamentEstimates"); totals->setWordWrap(true); outer->addWidget(totals);
     auto range=new QGroupBox("Layer range"); auto rangeRow=new QHBoxLayout(range); rangeRow->setContentsMargins(5,12,5,5);
     lowerLayer=new QSlider(Qt::Vertical); lowerLayer->setObjectName("lowerLayer"); upperLayer=new QSlider(Qt::Vertical); upperLayer->setObjectName("upperLayer");
-    lowerLayer->setMinimumHeight(80); upperLayer->setMinimumHeight(80); layerLabel=new QLabel; layerLabel->setWordWrap(true); rangeRow->addWidget(layerLabel,1); rangeRow->addWidget(lowerLayer); rangeRow->addWidget(upperLayer); outer->addWidget(range);
+    lowerLayer->setMinimumHeight(55); upperLayer->setMinimumHeight(55); layerLabel=new QLabel; layerLabel->setWordWrap(true); rangeRow->addWidget(layerLabel,1); rangeRow->addWidget(lowerLayer); rangeRow->addWidget(upperLayer); outer->addWidget(range);
     auto updateRange=[this](bool upper) {
         if(updatingPreview) return;
         QSignalBlocker low(lowerLayer),high(upperLayer);
@@ -47,7 +53,7 @@ QWidget *MainWindow::create_preview_inspector() {
     };
     connect(lowerLayer,&QSlider::valueChanged,this,[updateRange]{updateRange(false);}); connect(upperLayer,&QSlider::valueChanged,this,[updateRange]{updateRange(true);});
     auto label=new QLabel("Current movement"); label->setStyleSheet("font-weight:600;"); outer->addWidget(label);
-    movePreview=new QTextEdit; movePreview->setObjectName("moveCodePreview"); movePreview->setReadOnly(true); movePreview->setMinimumHeight(150);
+    movePreview=new QTextEdit; movePreview->setObjectName("moveCodePreview"); movePreview->setReadOnly(true); movePreview->setMinimumHeight(80);
     movePreview->setStyleSheet("font-family:Consolas;font-size:10px;background:#394345;color:#e9eded;"); outer->addWidget(movePreview,1);
     return panel;
 }
@@ -91,8 +97,25 @@ void MainWindow::update_move_preview() {
     movePreview->moveCursor(QTextCursor::Start);
 }
 void MainWindow::set_workspace(int index) {
+    if(index==0 && axisPreview->overriding()) axisPreview->follow_motion(simulation_at(replaying?replay:project,time,false).joint);
     QSignalBlocker guard(workspaces); workspaces->setCurrentIndex(index); viewport->set_prepare(index==0);
     auto inspector=findChild<QWidget*>("previewInspector"); if(inspector) inspector->setVisible(index==1);
     for(const auto &name:{"simulationControls","simulationPaths","simulationTransport"}) if(auto widget=findChild<QWidget*>(name)) widget->setVisible(index==1);
     if(index==1) viewport->set_time(time);
+}
+void MainWindow::update_axis_pose(const JointState &pose,bool overrideMotion) {
+    if(overrideMotion) playing=false;
+    bool wasOverride=viewport->axis_pose_active();
+    viewport->set_axis_pose(pose,overrideMotion);
+    bool current=motionValidated && project.report.exportable();
+    exportButton->setEnabled(!overrideMotion && current && processEditor->valid());
+    if(overrideMotion){
+        validation->setText("Axis pose preview · motion not validated");validation->setStyleSheet("color:#ad6a20;");
+        movePreview->setPlainText("AXIS POSE PREVIEW\nNo generated G-code for this pose.\n\nThe nozzle follows a fixed point on the workpiece. No new material is deposited.\n\nChoose Follow toolpath to return to planned or exported motion.");
+    }
+    else{
+        validation->setText(current?QString("Motion validated\nMinimum clearance: %1 mm\n%2 checked intervals").arg(project.report.minimumClearance,0,'f',3).arg(project.report.checkedIntervals):QString("Export blocked\n%1 collision / unresolved events").arg(project.report.events.size()));
+        validation->setStyleSheet(current?"color:#27845f;":"color:#ad6a20;");
+        if(wasOverride){lastPreviewMove=-1;update_move_preview();}
+    }
 }

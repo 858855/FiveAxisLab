@@ -4,6 +4,7 @@
 #include "core/geometry.h"
 #include "core/project.h"
 #include "core/process.h"
+#include "core/motion_preview.h"
 #include "core/slicing.h"
 #include "core/step_import.h"
 #include "core/stress.h"
@@ -164,6 +165,8 @@ MainWindow::MainWindow() : project(demo_project()) {
     connect(deposited,&QCheckBox::toggled,viewport,&Viewport::set_deposited_visible);
     auto showHead=new QCheckBox("Toolhead"); showHead->setChecked(true); showHead->setObjectName("showToolhead"); pathControls->insertWidget(4,showHead);
     connect(showHead,&QCheckBox::toggled,viewport,&Viewport::set_toolhead_visible);
+    auto axesVisible=new QCheckBox("Rotary axes");axesVisible->setChecked(true);axesVisible->setObjectName("showRotaryAxes");pathControls->insertWidget(5,axesVisible);
+    connect(axesVisible,&QCheckBox::toggled,viewport,&Viewport::set_rotary_axes_visible);
     auto canvas=new QHBoxLayout; canvas->setSpacing(6); canvas->addWidget(viewport,1); canvas->addWidget(create_preview_inspector()); right->addLayout(canvas,1);
     auto transportPanel=new QWidget; transportPanel->setObjectName("simulationTransport"); auto transport=new QHBoxLayout(transportPanel); transport->setContentsMargins(0,0,0,0); auto previous=new QPushButton("◀ Step"),forward=new QPushButton("Step ▶");
     timeline=new EventTimeline; timeline->setObjectName("moveTimeline"); timeline->setRange(0,10000);
@@ -273,6 +276,16 @@ MainWindow::MainWindow() : project(demo_project()) {
     machineMenu->addAction("Bed, fixtures and machine bodies",this,&MainWindow::machine_obstacles);
     auto simulationMenu=menuBar()->addMenu("Simulation"); simulationMenu->addAction("Try collision avoidance",this,[this]{run("Repair");});
     simulationMenu->addAction("Validate current motion",this,[this]{run("Validate");});
+    auto axisDemo=[this](Layout machineLayout){
+        if(worker.isRunning())return;
+        playing=false;replaying=false;time=0;
+        project=axis_motion_demo(machineLayout);fixedFaces.clear();forceFaces.clear();
+        refresh();set_workspace(1);seek(0);viewport->fit();
+        log->append("Tilt / roll demonstration: play or scrub to see coordinated axes. No extrusion; export blocked.");
+    };
+    simulationMenu->addSeparator();
+    simulationMenu->addAction("Open rotary-bed axis demonstration",this,[axisDemo]{axisDemo(Layout::RotaryBed);});
+    simulationMenu->addAction("Open tilting-head axis demonstration",this,[axisDemo]{axisDemo(Layout::TiltingHead);});
     auto view = menuBar()->addMenu("View");
     view->addAction("Fit geometry", viewport, &Viewport::fit);
     view->addAction("Save preview image…", this, [this] {
@@ -391,6 +404,7 @@ MainWindow::MainWindow() : project(demo_project()) {
         if (!index) {
             replaying = false;
             viewport->set_project(&project);
+            axisPreview->set_project(&project,simulation_at(project,0,false).joint);
             seek(0);
             return;
         }
@@ -414,6 +428,7 @@ MainWindow::MainWindow() : project(demo_project()) {
                 replay = std::move(result.project);
                 replaying = true;
                 viewport->set_project(&replay);
+                axisPreview->set_project(&replay,simulation_at(replay,0,false).joint);
                 refresh_preview();
                 seek(0);
             }
@@ -447,6 +462,7 @@ void MainWindow::show_error(const QString &message) {
     statusBar()->showMessage(message, 12000);
 }
 void MainWindow::refresh() {
+    motionValidated=project.report.exportable() && project.report.fingerprint==project.fingerprint();
     QSignalBlocker a(controller), b(layout), c(extension), j(dummyToolhead), densityGuard(filamentDensity),costGuard(filamentCost);
     controller->setCurrentIndex(int(project.machine.controller)); layout->setCurrentIndex(int(project.machine.layout));
     extension->setChecked(project.machine.klipperExtension); extension->setEnabled(project.machine.controller==Controller::Klipper);
@@ -457,6 +473,7 @@ void MainWindow::refresh() {
     partName->setText(project.part.empty()?"No printable part":QFileInfo(project.part.name).fileName()+" · Global settings");
     dummyToolhead->setChecked(project.useDummyToolhead);
     viewport->set_project(&project);
+    axisPreview->set_project(&project,simulation_at(project,time,false).joint);
     viewport->set_selected(fixedFaces, forceFaces);
     auto events = static_cast<EventTimeline *>(timeline);
     events->marks.clear();
@@ -471,7 +488,7 @@ void MainWindow::refresh() {
                          .arg(project.stress.directional      ? "Complete stress tensors"
                               : project.stress.scalar.empty() ? "No results"
                                                               : "Scalar visualization only"));
-    bool current = project.report.exportable() && project.report.fingerprint == project.fingerprint();
+    bool current = motionValidated;
     validation->setText(
         current
             ? QString("Motion validated\nMinimum clearance: %1 mm\n%2 checked intervals")
@@ -496,6 +513,7 @@ void MainWindow::invalidate() {
     refresh();
 }
 void MainWindow::execute(const QString &label, std::function<void(Project &, std::atomic_bool *)> task) {
+    axisPreview->follow_motion(simulation_at(project,time,false).joint);
     if (worker.isRunning()) {
         show_error("Wait for the current job or cancel it first");
         return;
@@ -1003,6 +1021,7 @@ void MainWindow::setup_loads() {
     }
 }
 void MainWindow::export_file() {
+    if(axisPreview->overriding()){show_error("Return to Follow toolpath before exporting validated motion");return;}
     if(!processEditor->valid()) {show_error(processEditor->validation_error());return;}
     try {
         auto text = export_gcode(project);
@@ -1046,6 +1065,7 @@ void MainWindow::load(const QString &filename) {
     }
 }
 void MainWindow::toggle_play() {
+    if(axisPreview->overriding()){axisPreview->toggle_animation();return;}
     auto &p = replaying ? replay : project;
     if (p.path.empty())
         return;
@@ -1062,11 +1082,15 @@ void MainWindow::seek(double t) {
     QSignalBlocker blocker(timeline);
     timeline->setValue(p.path.back().time > 0 ? int(time / p.path.back().time * 10000) : 0);
     viewport->set_time(time);
+    axisPreview->follow_motion(simulation_at(p,time,false).joint);
     update_move_preview();
 }
 void MainWindow::capture(const QString &filename) {
-    set_workspace(project.path.empty()?0:1);
-    seek(project.path.empty() ? 0 : project.path.back().time * .65);
+    bool posePreview=axisPreview->overriding();
+    set_workspace(posePreview || !project.path.empty()?1:0);
+    if(!posePreview)seek(project.path.empty() ? 0 : project.path.back().time * .65);
+    if(posePreview)axisPreview->pause();
+    viewport->fit();
     viewport->repaint();
     grab().save(filename);
 }

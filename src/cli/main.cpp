@@ -6,6 +6,7 @@
 #include "core/slicing.h"
 #include "core/step_import.h"
 #include "core/stress.h"
+#include "core/motion_preview.h"
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDir>
@@ -41,8 +42,15 @@ int main(int argc, char **argv) {
     parser.addOption({"profile", "Save the machine profile", "file"});
     parser.addOption({"plan-only", "Save planned motion with an unresolved validation status"});
     parser.addOption({"head-motion", "Generate a compensated tilting-head deposition fixture"});
+    parser.addOption({"axis-demo", "Save a non-printing tilt/roll preview; requires --output", "bed|head"});
     parser.process(app);
     try {
+        if(parser.isSet("axis-demo")){
+            auto value=parser.value("axis-demo");if(value!="bed" && value!="head")throw std::runtime_error("Axis demo must be bed or head");
+            if(!parser.isSet("output") || parser.isSet("gcode") || parser.isSet("slice") || parser.isSet("validate") || parser.isSet("replay"))throw std::runtime_error("Axis demo requires --output and cannot export or validate a print job");
+            save_project(axis_motion_demo(value=="bed"?Layout::RotaryBed:Layout::TiltingHead),parser.value("output"));
+            std::cout<<"Axis demonstration saved. No extrusion; export is blocked.\n";return 0;
+        }
         Project p = demo_project();
         QStringList presetNotes;
         if (parser.isSet("head-motion")) {
