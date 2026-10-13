@@ -1,0 +1,29 @@
+build/
+sdk/
+.deps-cache/
+dist/
+exports/
+*.user
+ucrt64.db
+__pycache__/
+*.log
+cache/
+*.png
+
+# Recreated from checksum-pinned upstream archives by tools/fetch_sources.py.
+/vendor/libccd/
+/vendor/fcl/
+/vendor/ompl/
+/vendor/klipper/
+
+# Keep the release evidence and desktop preview with the source.
+!/examples/reports/*.log
+!/examples/reports/*.png
+
+# Local editor and credential files.
+.vs/
+.idea/
+.env
+.env.*
+*.pem
+*.key
