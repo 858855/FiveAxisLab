@@ -183,6 +183,18 @@ static ToolheadAssembly read_toolhead(const QJsonObject &t) {
     }
     return tool;
 }
+// Heating and fan settings are written only when changed, so projects from earlier versions
+// serialize, and keep their planning signatures, exactly as before.
+static QJsonObject filament_json(const Project &p) {
+    QJsonObject filament{{"name", p.filamentName}, {"density", p.filamentDensity}, {"cost", p.filamentCost}};
+    if (p.nozzleTemperature != 210)
+        filament["nozzleTemperature"] = p.nozzleTemperature;
+    if (p.bedTemperature != 60)
+        filament["bedTemperature"] = p.bedTemperature;
+    if (p.fanSpeed != 1)
+        filament["fan"] = p.fanSpeed;
+    return filament;
+}
 QJsonObject project_json(const Project &p) {
     QJsonObject m{{"layout", int(p.machine.layout)},
                   {"controller", int(p.machine.controller)},
@@ -317,12 +329,7 @@ QJsonObject project_json(const Project &p) {
         {"machine", m},
         {"process", s},
         {"filament",
-         QJsonObject{{"name", p.filamentName},
-                     {"density", p.filamentDensity},
-                     {"cost", p.filamentCost},
-                     {"nozzleTemperature", p.nozzleTemperature},
-                     {"bedTemperature", p.bedTemperature},
-                     {"fan", p.fanSpeed}}},
+         filament_json(p)},
         {"stress", stress},
         {"loads", loads},
         {"comparison", comparison},

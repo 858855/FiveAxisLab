@@ -1,4 +1,4 @@
-# FiveAxisLab 0.4.3
+# FiveAxisLab 0.4.4
 
 Independent C++17 / Qt 6 / OpenGL research application for five-axis FFF. Windows x64 portable build, shared headless core, AGPL-3.0-or-later. This is an initial research implementation, with remaining qualification work recorded in [docs/VALIDATION.md](docs/VALIDATION.md).
 
@@ -6,9 +6,11 @@ Version 0.4.2 rebuilds **Machine setup** around the supplied Orca printer-settin
 
 Version 0.4.3 fixes STEP face seams being incorrectly rejected as open meshes during **Slice + validate**. Closed solids are stitched at numerical precision before volume meshing; saved projects from earlier importers are supported. Actual holes and non-manifold edges remain errors, with edge counts in the diagnostic. See [STEP import fix and evidence](docs/RELEASE_0_4_3.md).
 
+Version 0.4.4 corrects slicing and output against OrcaSlicer behavior: shells on every exposed surface, Orca wall offsets, feedrates at the requested speed, heating in single-object G-code, continuous supports and production 3MF import. Planar layers are cut directly from the surface mesh, so CAD tessellation the volume mesher rejects (such as 3DBenchy) still slices. Collision validation runs in parallel with results identical to a sequential pass. See [0.4.4 release notes and evidence](docs/RELEASE_0_4_4.md).
+
 ## Run
 
-Extract the locally packaged `dist/FiveAxisLab-0.4.3-win64.zip` and run `FiveAxisLab.exe`. No SDK or Python is needed to run the packaged desktop app. The portable folder also contains `fiveaxis_cli.exe`, example projects, CAD fixtures, optional GPU backends, controller integration, dependency notices and validation reports. Binary packages and the SDK are excluded from Git; a fresh clone can produce them using the build instructions below.
+Extract the locally packaged `dist/FiveAxisLab-0.4.4-win64.zip` and run `FiveAxisLab.exe`. No SDK or Python is needed to run the packaged desktop app. The portable folder also contains `fiveaxis_cli.exe`, example projects, CAD fixtures, optional GPU backends, controller integration, dependency notices and validation reports. Binary packages and the SDK are excluded from Git; a fresh clone can produce them using the build instructions below.
 
 Version 0.4.1 adds automatic bead-limit filling in **Plate / tools → Tools and nozzles**: changing nozzle diameter fills both height and width with a minimum of half the diameter and a maximum of twice the diameter (0.8 mm → 0.4–1.6 mm). All limits remain editable; disable auto-fill to keep custom limits through later diameter changes. The preference and values are saved per tool. Opening an existing project preserves its stored limits.
 

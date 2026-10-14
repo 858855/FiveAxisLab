@@ -1,6 +1,6 @@
 # CPU and GPU execution
 
-The Performance tab selects **Auto / CPU / NVIDIA CUDA / Vulkan**, device, CPU budget and memory fraction. CPU mode requires no GPU. Auto CPU budget is logical processors minus one, with a minimum of one. A bounded persistent pool processes independent objects, element assembly, sampling and collision batches. Nested pool work runs serially to avoid multiplying the configured worker count. Open CASCADE meshing remains controlled independently.
+The Performance tab selects **Auto / CPU / NVIDIA CUDA / Vulkan**, device, CPU budget and memory fraction. CPU mode requires no GPU. Auto CPU budget is logical processors minus two, with a minimum of one; it also sets the number of parallel collision-validation workers. A bounded persistent pool processes independent objects, element assembly, sampling and collision batches. Nested pool work runs serially to avoid multiplying the configured worker count. Open CASCADE meshing remains controlled independently.
 
 CUDA and Vulkan are optional libraries loaded through **C ABI 2**: plain buffers, version checks and plugin-owned contexts. No C++/Qt object or allocator crosses the plugin boundary. One process-wide dispatch lock serializes compute dispatch, and one selected device handles a job. Batch size is bounded to 65,536 records and memory fraction to the configured budget.
 

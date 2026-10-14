@@ -479,6 +479,11 @@ QString plate_generation_signature(const Project &p) {
     job.remove("compute");
     job.remove("computation");
     json["plateJob"] = job;
+    // Heater and fan settings change the emitted commands, not the planned motion.
+    auto filament = json["filament"].toObject();
+    for (const char *key : {"nozzleTemperature", "bedTemperature", "fan"})
+        filament.remove(key);
+    json["filament"] = filament;
     return QString::fromLatin1(QCryptographicHash::hash(QJsonDocument(json).toJson(QJsonDocument::Compact),
                                                         QCryptographicHash::Sha256)
                                    .toHex());

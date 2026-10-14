@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuite name="MachineTests" timestamp="2026&#x002D;10&#x002D;14T16:15:38" hostname="sven" tests="7" failures="0" errors="0" skipped="0" time="0.314">
+  <properties>
+    <property name="QTestVersion" value="6.11.2"/>
+    <property name="QtVersion" value="6.11.2"/>
+    <property name="QtBuild" value="Qt 6.11.2 (x86_64&#x002D;little_endian&#x002D;llp64 shared (dynamic) release build; by GCC 16.2.0)"/>
+  </properties>
+  <testcase name="initTestCase" classname="MachineTests" time="0.000"/>
+  <testcase name="settings_roundtrip_and_legacy_fingerprint" classname="MachineTests" time="0.025"/>
+  <testcase name="bed_shapes_and_exclusions" classname="MachineTests" time="0.000"/>
+  <testcase name="axis_timing_and_controller_units" classname="MachineTests" time="0.000"/>
+  <testcase name="planned_retraction_hop_wipe" classname="MachineTests" time="0.156"/>
+  <testcase name="custom_scripts_are_collision_checked" classname="MachineTests" time="0.129"/>
+  <testcase name="cleanupTestCase" classname="MachineTests" time="0.000"/>
+</testsuite>

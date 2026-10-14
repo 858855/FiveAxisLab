@@ -42,6 +42,24 @@ class PlateTests : public QObject {
         return p;
     }
   private Q_SLOTS:
+    void saved_plates_stay_current() {
+        // Plate projects saved by earlier versions keep their planning signature: settings added
+        // later (such as heater temperatures) must not mark existing toolpaths stale.
+        auto p = load_project(QStringLiteral(FAL_SOURCE_DIR "/examples/plate/sequential.5axis"));
+        QVERIFY(p.plateEnabled && !p.pathProcessFingerprint.isEmpty());
+        QCOMPARE(plate_generation_signature(p), p.pathProcessFingerprint);
+        auto heated = p;
+        heated.nozzleTemperature = 230;
+        heated.bedTemperature = 80;
+        heated.fanSpeed = .5;
+        QCOMPARE(plate_generation_signature(heated), p.pathProcessFingerprint);
+        QTemporaryDir dir;
+        save_project(heated, dir.filePath("heated.5axis"));
+        auto loaded = load_project(dir.filePath("heated.5axis"));
+        QCOMPARE(loaded.nozzleTemperature, 230.0);
+        QCOMPARE(loaded.bedTemperature, 80.0);
+        QCOMPARE(loaded.fanSpeed, .5);
+    }
     void schema_migration() {
         auto p = fixture();
         auto json = project_json(p);
