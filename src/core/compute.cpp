@@ -67,7 +67,8 @@ Pool &pool() {
 } // namespace
 int compute_threads(const ComputeSettings &s) {
     int available = std::max(1, int(std::thread::hardware_concurrency()));
-    return s.threads > 0 ? std::clamp(s.threads, 1, available) : std::max(1, available - 1);
+    // Automatic budget leaves two hardware threads for the desktop and other work.
+    return s.threads > 0 ? std::clamp(s.threads, 1, available) : std::max(1, available - 2);
 }
 void parallel_for(size_t count, const ComputeSettings &settings, const std::function<void(size_t)> &task,
                   std::atomic_bool *cancel) {

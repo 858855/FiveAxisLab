@@ -44,6 +44,9 @@ int main(int argc, char **argv) {
     parser.addOption({"maximum-bridge", "Maximum span used by the deposition support heuristic", "mm"});
     parser.addOption({"fem", "Import a complete tensor or scalar VTU file", "file"});
     parser.addOption({"stress-array", "Select the VTU array", "name"});
+    parser.addOption({"fea-load",
+                      "Solve linear static FEA: fix the bottom face, load the top face with total force fx,fy,fz (N)",
+                      "fx,fy,fz"});
     parser.addOption({"stock-klipper", "Disable the optional flow extension"});
     parser.addOption({"replay", "Semantically replay and revalidate exported output"});
     parser.addOption({"profile", "Save the machine profile", "file"});
@@ -354,6 +357,34 @@ int main(int argc, char **argv) {
                 options.array = parser.value("stress-array");
                 options.alignment = p.partPlacement;
                 p.stress = import_vtu({parser.value("fem")}, options);
+            }
+            if (parser.isSet("fea-load")) {
+                auto parts = parser.value("fea-load").split(',');
+                bool ok = parts.size() == 3;
+                Vec3 force = Vec3::Zero();
+                for (int k = 0; ok && k < 3; ++k)
+                    force[k] = parts[k].toDouble(&ok);
+                if (!ok || !force.allFinite() || force.norm() <= 0)
+                    throw std::runtime_error("--fea-load expects a nonzero force fx,fy,fz");
+                p.volume = tetrahedralize(p.part, std::max(.05, p.part.bounds().sizes().prod() / 1500));
+                auto bounds = p.part.bounds();
+                std::vector<int> loaded;
+                p.loads = {};
+                for (int i = 0; i < int(p.volume.vertices.size()); ++i) {
+                    double z = p.volume.vertices[i].z();
+                    if (z <= bounds.min().z() + .5)
+                        p.loads.fixedNodes.push_back(i);
+                    else if (z >= bounds.max().z() - 1)
+                        loaded.push_back(i);
+                }
+                if (p.loads.fixedNodes.size() < 3 || loaded.empty())
+                    throw std::runtime_error("Bottom/top faces do not map to enough volume nodes for FEA");
+                for (int i : loaded)
+                    p.loads.nodalForces.emplace_back(i, force / double(loaded.size()));
+                auto result = solve_fea(p.volume, p.loads);
+                p.stress = result.stress;
+                std::cerr << "FEA: " << p.loads.fixedNodes.size() << " fixed / " << loaded.size()
+                          << " loaded nodes, compliance " << result.compliance << " N*mm\n";
             }
             slice_project(p);
         }

@@ -7,6 +7,7 @@
 #include <Eigen/SparseCholesky>
 #include <QFile>
 #include <algorithm>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -217,11 +218,11 @@ double StressField::scalar_at(const Vec3 &p, bool *covered) const {
     }
     if (covered)
         *covered = false;
-    for (size_t i = 0; i < mesh.cells.size(); ++i) {
+    Eigen::Vector4d w;
+    int found = locate(p, w);
+    if (found >= 0) {
+        size_t i = size_t(found);
         auto &cell = mesh.cells[i];
-        Eigen::Vector4d w;
-        if (!barycentric(mesh, cell, p, w))
-            continue;
         if (covered)
             *covered = true;
         if (!pointData)
@@ -240,23 +241,92 @@ double StressField::scalar_at(const Vec3 &p, bool *covered) const {
     }
     return 0;
 }
-Mat3 StressField::sample(const Vec3 &p, bool *covered) const {
-    if (covered)
-        *covered = false;
-    if (!directional)
-        return Mat3::Zero();
-    for (size_t i = 0; i < mesh.cells.size(); ++i) {
+// Uniform grid over the stress mesh; each grid cell lists, in ascending order, the mesh cells
+// whose bounding box overlaps it. Slicing samples the field at every path point, and a linear
+// scan of all cells per sample dominated stress-guided slicing time.
+struct StressCellIndex {
+    const void *vertices = nullptr, *cells = nullptr;
+    size_t vertexCount = 0, cellCount = 0;
+    Eigen::AlignedBox3d bounds;
+    double size = 1;
+    Eigen::Vector3i count = Eigen::Vector3i::Ones();
+    std::vector<std::vector<int>> grid;
+};
+int StressField::locate(const Vec3 &p, Eigen::Vector4d &w) const {
+    auto index = std::atomic_load(&cellIndex);
+    if (!index || index->vertices != mesh.vertices.data() || index->cells != mesh.cells.data() ||
+        index->vertexCount != mesh.vertices.size() || index->cellCount != mesh.cells.size()) {
+        static std::mutex building;
+        std::lock_guard<std::mutex> lock(building);
+        index = std::atomic_load(&cellIndex);
+        if (!index || index->vertices != mesh.vertices.data() || index->cells != mesh.cells.data() ||
+            index->vertexCount != mesh.vertices.size() || index->cellCount != mesh.cells.size()) {
+            auto built = std::make_shared<StressCellIndex>();
+            built->vertices = mesh.vertices.data();
+            built->cells = mesh.cells.data();
+            built->vertexCount = mesh.vertices.size();
+            built->cellCount = mesh.cells.size();
+            for (const auto &v : mesh.vertices)
+                built->bounds.extend(v);
+            if (!mesh.cells.empty() && !built->bounds.isEmpty()) {
+                Vec3 sizes = built->bounds.sizes().cwiseMax(1e-6);
+                built->size = std::max(std::cbrt(sizes.prod() / double(mesh.cells.size())) * 1.5, 1e-6);
+                for (int k = 0; k < 3; ++k)
+                    built->count[k] = std::clamp(int(std::ceil(sizes[k] / built->size)), 1, 512);
+                built->grid.resize(size_t(built->count.prod()));
+                auto at = [&](double v, int k) {
+                    return std::clamp(int(std::floor((v - built->bounds.min()[k]) / built->size)), 0, built->count[k] - 1);
+                };
+                for (int i = 0; i < int(mesh.cells.size()); ++i) {
+                    Eigen::AlignedBox3d b;
+                    for (int n : mesh.cells[i].nodes)
+                        b.extend(mesh.vertices[n]);
+                    Eigen::Vector3i lo, hi;
+                    for (int k = 0; k < 3; ++k) {
+                        lo[k] = at(b.min()[k] - 1e-7, k);
+                        hi[k] = at(b.max()[k] + 1e-7, k);
+                    }
+                    for (int x = lo.x(); x <= hi.x(); ++x)
+                        for (int y = lo.y(); y <= hi.y(); ++y)
+                            for (int z = lo.z(); z <= hi.z(); ++z)
+                                built->grid[(size_t(z) * built->count.y() + y) * built->count.x() + x].push_back(i);
+                }
+            }
+            index = built;
+            std::atomic_store(&cellIndex, index);
+        }
+    }
+    if (index->grid.empty())
+        return -1;
+    Eigen::Vector3i c;
+    for (int k = 0; k < 3; ++k) {
+        double v = (p[k] - index->bounds.min()[k]) / index->size;
+        if (v < -1e-6 / index->size || v > index->count[k] + 1e-6 / index->size)
+            return -1;
+        c[k] = std::clamp(int(std::floor(v)), 0, index->count[k] - 1);
+    }
+    for (int i : index->grid[(size_t(c.z()) * index->count.y() + c.y()) * index->count.x() + c.x()]) {
         const auto &cell = mesh.cells[i];
         Eigen::AlignedBox3d b;
         for (int n : cell.nodes)
             b.extend(mesh.vertices[n]);
         b.min().array() -= 1e-7;
         b.max().array() += 1e-7;
-        if (!b.contains(p))
-            continue;
-        Eigen::Vector4d w;
-        if (!barycentric(mesh, cell, p, w))
-            continue;
+        if (b.contains(p) && barycentric(mesh, cell, p, w))
+            return i;
+    }
+    return -1;
+}
+Mat3 StressField::sample(const Vec3 &p, bool *covered) const {
+    if (covered)
+        *covered = false;
+    if (!directional)
+        return Mat3::Zero();
+    Eigen::Vector4d w;
+    int found = locate(p, w);
+    if (found >= 0) {
+        size_t i = size_t(found);
+        const auto &cell = mesh.cells[i];
         if (covered)
             *covered = true;
         if (!pointData)
@@ -288,14 +358,9 @@ std::vector<Mat3> sample_stress_batch(const StressField &field, const std::vecto
             if (!covered)
                 throw std::runtime_error("FEM field does not cover the sampled volume");
             Eigen::Vector4d weights;
-            const Tetrahedron *cell = nullptr;
-            size_t cellIndex = 0;
-            for (size_t k = 0; k < field.mesh.cells.size(); ++k)
-                if (barycentric(field.mesh, field.mesh.cells[k], points[i], weights)) {
-                    cell = &field.mesh.cells[k];
-                    cellIndex = k;
-                    break;
-                }
+            int located = field.locate(points[i], weights);
+            const Tetrahedron *cell = located >= 0 ? &field.mesh.cells[located] : nullptr;
+            size_t cellIndex = located >= 0 ? size_t(located) : 0;
             if (!cell)
                 throw std::runtime_error("Stress sampling correspondence failed");
             bool linear = field.pointData && cell->nodes.size() == 4;

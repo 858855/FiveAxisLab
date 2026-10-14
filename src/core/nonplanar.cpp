@@ -31,7 +31,7 @@ std::vector<double> conformal_field(const Project &p) {
             if(w.minCoeff()<-1e-7 || w.sum()>1+1e-7)continue;
             top=std::max(top,t.origin.z()*(1-w.sum())+t.b.z()*w.x()+t.c.z()*w.y());
         }
-        if(top<=anchor+1e-7 || top<v.z()-1e-6)throw std::runtime_error("Cannot establish the model top height for non-planar slicing");
+        if(top<=anchor+1e-7 || top<v.z()-1e-6)throw std::runtime_error("Cannot establish the model top height for non-planar slicing: XYZ non-planar layers need one top surface above every point, so overhangs or undercuts above the planar base are not supported. Use planar slicing, raise the planar base height, or a rotary mode.");
         values.push_back(anchor+(v.z()-anchor)*(high-anchor)/(top-anchor));
     }
     for(const auto &cell:p.volume.cells) {

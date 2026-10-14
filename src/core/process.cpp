@@ -141,16 +141,23 @@ ProcessSettings import_orca_process(const QJsonObject &j, const ProcessSettings 
         if(!ok || !std::isfinite(n) || (hasPercent && !percent)) throw std::runtime_error(("Unsupported numeric format: "+key).toStdString());
         target=percent?n/100:n;
     };
+    number("nozzle_diameter",s.nozzleDiameter);
+    // Orca line widths may be given as a percentage of the nozzle diameter ("105%").
+    auto lineWidth = [&](const QString &key, double &target) {
+        if (!j.contains(key)) return;
+        if (text(key).trimmed().endsWith('%')) { double fraction=0; number(key,fraction,true); target=fraction*s.nozzleDiameter; }
+        else number(key,target);
+    };
     number("layer_height",s.layerHeight); number("initial_layer_print_height",s.firstLayerHeight);
-    number("line_width",s.width); number("initial_layer_line_width",s.firstLayerWidth);
-    number("outer_wall_line_width",s.outerWallWidth); number("inner_wall_line_width",s.innerWallWidth);
-    number("sparse_infill_line_width",s.infillWidth); number("internal_solid_infill_line_width",s.solidWidth);
-    number("top_surface_line_width",s.topWidth); number("support_line_width",s.supportWidth);
+    lineWidth("line_width",s.width); lineWidth("initial_layer_line_width",s.firstLayerWidth);
+    lineWidth("outer_wall_line_width",s.outerWallWidth); lineWidth("inner_wall_line_width",s.innerWallWidth);
+    lineWidth("sparse_infill_line_width",s.infillWidth); lineWidth("internal_solid_infill_line_width",s.solidWidth);
+    lineWidth("top_surface_line_width",s.topWidth); lineWidth("support_line_width",s.supportWidth);
     number("resolution",s.resolution); number("xy_contour_compensation",s.contourCompensation);
     number("xy_hole_compensation",s.holeCompensation); number("elefant_foot_compensation",s.elephantFoot);
     number("top_shell_thickness",s.topThickness); number("bottom_shell_thickness",s.bottomThickness);
     number("top_surface_density",s.topDensity,true); number("bottom_surface_density",s.bottomDensity,true);
-    number("sparse_infill_density",s.infill,true); number("nozzle_diameter",s.nozzleDiameter);
+    number("sparse_infill_density",s.infill,true);
     if(s.width==0) s.width=default_line_width(s.nozzleDiameter);
     number("outer_wall_speed",s.outerWallSpeed); number("inner_wall_speed",s.innerWallSpeed);
     number("sparse_infill_speed",s.infillSpeed); number("internal_solid_infill_speed",s.solidSpeed);

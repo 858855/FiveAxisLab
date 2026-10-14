@@ -97,8 +97,86 @@ bool contains(const Mesh &mesh, const Vec3 &point) {
         hits.end());
     return hits.size() % 2 != 0;
 }
-void weld_mesh_vertices(Mesh &m) {
-    constexpr double tolerance = 1e-7;
+// A nearly vertical ray keeps each query inside a few XY grid cells while avoiding
+// the axis-aligned edge and vertex hits of a perfectly vertical ray.
+static const Vec3 testerRay = Vec3(0.0123456, 0.0071234, 1).normalized();
+InsideTester::InsideTester(const Mesh &m) : mesh(&m), box(m.bounds()) {
+    if (m.triangles.empty())
+        return;
+    Eigen::Vector2d size = box.sizes().head<2>().cwiseMax(1e-6);
+    double area = 0;
+    for (const auto &t : m.triangles) {
+        Eigen::AlignedBox2d b;
+        for (int j = 0; j < 3; ++j)
+            b.extend(m.vertices[t[j]].head<2>());
+        area += b.volume();
+    }
+    cell = std::max({std::sqrt(area / m.triangles.size()) * 2, size.maxCoeff() / 1024, 1e-6});
+    origin = box.min().head<2>();
+    nx = std::max(1, int(std::ceil(size.x() / cell)));
+    ny = std::max(1, int(std::ceil(size.y() / cell)));
+    cells.resize(size_t(nx) * ny);
+    for (int i = 0; i < int(m.triangles.size()); ++i) {
+        Eigen::AlignedBox2d b;
+        for (int j = 0; j < 3; ++j)
+            b.extend(m.vertices[m.triangles[i][j]].head<2>());
+        int x0 = std::clamp(int((b.min().x() - origin.x()) / cell), 0, nx - 1),
+            x1 = std::clamp(int((b.max().x() - origin.x()) / cell), 0, nx - 1),
+            y0 = std::clamp(int((b.min().y() - origin.y()) / cell), 0, ny - 1),
+            y1 = std::clamp(int((b.max().y() - origin.y()) / cell), 0, ny - 1);
+        for (int y = y0; y <= y1; ++y)
+            for (int x = x0; x <= x1; ++x)
+                cells[size_t(y) * nx + x].push_back(i);
+    }
+}
+bool InsideTester::contains(const Vec3 &point) const {
+    if (cells.empty() || !box.contains(point))
+        return false;
+    Eigen::Vector2d end = point.head<2>() + testerRay.head<2>() / testerRay.z() * (box.max().z() - point.z());
+    Eigen::AlignedBox2d footprint;
+    footprint.extend(point.head<2>());
+    footprint.extend(end);
+    int x0 = std::clamp(int((footprint.min().x() - origin.x()) / cell), 0, nx - 1),
+        x1 = std::clamp(int((footprint.max().x() - origin.x()) / cell), 0, nx - 1),
+        y0 = std::clamp(int((footprint.min().y() - origin.y()) / cell), 0, ny - 1),
+        y1 = std::clamp(int((footprint.max().y() - origin.y()) / cell), 0, ny - 1);
+    std::vector<int> candidates;
+    for (int y = y0; y <= y1; ++y)
+        for (int x = x0; x <= x1; ++x) {
+            const auto &list = cells[size_t(y) * nx + x];
+            candidates.insert(candidates.end(), list.begin(), list.end());
+        }
+    std::sort(candidates.begin(), candidates.end());
+    candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
+    std::vector<double> hits;
+    for (int id : candidates) {
+        const auto &t = mesh->triangles[id];
+        const Vec3 &v = mesh->vertices[t[0]];
+        Vec3 a = mesh->vertices[t[1]] - v, b = mesh->vertices[t[2]] - v, h = testerRay.cross(b);
+        double det = a.dot(h);
+        if (std::abs(det) < 1e-12)
+            continue;
+        Vec3 s = point - v;
+        double u = s.dot(h) / det;
+        if (u < 0 || u > 1)
+            continue;
+        Vec3 q = s.cross(a);
+        double w = testerRay.dot(q) / det;
+        if (w < 0 || u + w > 1)
+            continue;
+        double d = b.dot(q) / det;
+        if (d > 1e-9)
+            hits.push_back(d);
+    }
+    std::sort(hits.begin(), hits.end());
+    hits.erase(
+        std::unique(hits.begin(), hits.end(), [](double a, double b) { return std::abs(a - b) < 1e-7; }),
+        hits.end());
+    return hits.size() % 2 != 0;
+}
+void weld_mesh_vertices(Mesh &m, double tolerance) {
+    if (!std::isfinite(tolerance) || tolerance <= 0)
+        throw std::runtime_error("Invalid vertex weld tolerance");
     using Key = std::array<long long, 3>;
     std::map<Key, std::vector<int>> ids;
     std::vector<Vec3> v;
@@ -150,37 +228,63 @@ static Mesh parse_3mf(const QString &filename) {
     zip_t *z = zip_open(filename.toUtf8().constData(), ZIP_RDONLY, &error);
     if (!z)
         throw std::runtime_error("Cannot open 3MF archive");
-    QByteArray xml;
+    // Production-extension files (Orca, Bambu, PrusaSlicer) keep objects in separate
+    // 3D/Objects/*.model parts referenced from the root model by p:path.
+    std::map<QString, QByteArray> parts;
+    QByteArray relationships;
+    quint64 total = 0;
     for (zip_int64_t i = 0; i < zip_get_num_entries(z, 0); ++i) {
         QString name = QString::fromUtf8(zip_get_name(z, i, 0));
-        if (name.endsWith(".model", Qt::CaseInsensitive)) {
-            zip_stat_t st;
-            zip_stat_index(z, i, 0, &st);
-            if (st.size > 256 * 1024 * 1024) {
-                zip_close(z);
-                throw std::runtime_error("3MF model too large");
-            }
-            xml.resize(st.size);
-            auto f = zip_fopen_index(z, i, 0);
-            auto count = zip_fread(f, xml.data(), st.size);
-            zip_fclose(f);
-            if (count != zip_int64_t(st.size)) {
-                zip_close(z);
-                throw std::runtime_error("Truncated 3MF");
-            }
-            break;
+        bool model = name.endsWith(".model", Qt::CaseInsensitive);
+        if (!model && name.compare("_rels/.rels", Qt::CaseInsensitive) != 0)
+            continue;
+        zip_stat_t st;
+        if (zip_stat_index(z, i, 0, &st) < 0 || st.size > 256 * 1024 * 1024 ||
+            (total += st.size) > 1024ull * 1024 * 1024) {
+            zip_close(z);
+            throw std::runtime_error("3MF model too large");
         }
+        QByteArray bytes(qsizetype(st.size), Qt::Uninitialized);
+        auto f = zip_fopen_index(z, i, 0);
+        if (!f) {
+            zip_close(z);
+            throw std::runtime_error("Cannot read 3MF model part");
+        }
+        auto count = zip_fread(f, bytes.data(), st.size);
+        zip_fclose(f);
+        if (count != zip_int64_t(st.size)) {
+            zip_close(z);
+            throw std::runtime_error("Truncated 3MF");
+        }
+        if (model)
+            parts[name.toLower()] = bytes;
+        else
+            relationships = bytes;
     }
     zip_close(z);
-    QXmlStreamReader r(xml);
-    std::map<int, Mesh> objects;
+    if (parts.empty())
+        throw std::runtime_error("3MF archive contains no model");
+    auto normalize = [](QString path) {
+        while (path.startsWith('/'))
+            path.remove(0, 1);
+        return path.toLower();
+    };
+    QString root = "3d/3dmodel.model";
+    QXmlStreamReader rels(relationships);
+    while (!rels.atEnd())
+        if (rels.readNext() == QXmlStreamReader::StartElement && rels.name() == QLatin1String("Relationship") &&
+            rels.attributes().value("Type").toString().endsWith("/3dmodel"))
+            root = normalize(rels.attributes().value("Target").toString());
+    if (!parts.count(root))
+        root = parts.begin()->first;
+    using ObjectKey = std::pair<QString, int>;
     struct Instance {
-        int id;
+        ObjectKey id;
         Eigen::Matrix4d transform;
     };
+    std::map<ObjectKey, Mesh> objects;
+    std::map<ObjectKey, std::vector<Instance>> children;
     std::vector<Instance> build;
-    std::map<int, std::vector<Instance>> children;
-    int current = -1;
     double scale = 1;
     auto matrix = [](const QString &s) {
         Eigen::Matrix4d t = Eigen::Matrix4d::Identity();
@@ -194,43 +298,63 @@ static Mesh parse_3mf(const QString &filename) {
                 t(col, row) = a[row * 3 + col].toDouble();
         return t;
     };
-    while (!r.atEnd()) {
-        r.readNext();
-        if (!r.isStartElement())
-            continue;
-        auto a = r.attributes();
-        auto n = r.name();
-        if (n == "model") {
-            QString unit = a.value("unit").toString();
-            if (unit == "inch")
-                scale = 25.4;
-            else if (unit == "centimeter")
-                scale = 10;
-            else if (unit == "meter")
-                scale = 1000;
-            else if (unit == "micron")
-                scale = .001;
-        } else if (n == "object") {
-            current = a.value("id").toInt();
-            objects[current].name = a.value("name").toString();
-        } else if (n == "vertex") {
-            objects[current].vertices.emplace_back(a.value("x").toDouble(), a.value("y").toDouble(),
-                                                   a.value("z").toDouble());
-        } else if (n == "triangle") {
-            objects[current].triangles.emplace_back(a.value("v1").toInt(), a.value("v2").toInt(),
-                                                    a.value("v3").toInt());
-        } else if (n == "item")
-            build.push_back({a.value("objectid").toInt(), matrix(a.value("transform").toString())});
-        else if (n == "component")
-            children[current].push_back(
-                {a.value("objectid").toInt(), matrix(a.value("transform").toString())});
+    const QString production = "http://schemas.microsoft.com/3dmanufacturing/production/2015/06";
+    auto referenced = [&](const QXmlStreamAttributes &a, const QString &part) {
+        QString path = a.value(production, "path").toString();
+        if (path.isEmpty())
+            path = a.value("p:path").toString();
+        return path.isEmpty() ? part : normalize(path);
+    };
+    for (const auto &[part, xml] : parts) {
+        QXmlStreamReader r(xml);
+        std::optional<ObjectKey> current;
+        while (!r.atEnd()) {
+            r.readNext();
+            if (r.isEndElement() && r.name() == QLatin1String("object"))
+                current.reset();
+            if (!r.isStartElement())
+                continue;
+            auto a = r.attributes();
+            auto n = r.name();
+            if (n == QLatin1String("model") && part == root) {
+                QString unit = a.value("unit").toString();
+                if (unit == "inch")
+                    scale = 25.4;
+                else if (unit == "foot")
+                    scale = 304.8;
+                else if (unit == "centimeter")
+                    scale = 10;
+                else if (unit == "meter")
+                    scale = 1000;
+                else if (unit == "micron")
+                    scale = .001;
+            } else if (n == QLatin1String("object")) {
+                current = ObjectKey{part, a.value("id").toInt()};
+                objects[*current].name = a.value("name").toString();
+            } else if (n == QLatin1String("vertex") || n == QLatin1String("triangle") ||
+                       n == QLatin1String("component")) {
+                if (!current)
+                    throw std::runtime_error("3MF geometry outside an object");
+                if (n == QLatin1String("vertex"))
+                    objects[*current].vertices.emplace_back(a.value("x").toDouble(), a.value("y").toDouble(),
+                                                            a.value("z").toDouble());
+                else if (n == QLatin1String("triangle"))
+                    objects[*current].triangles.emplace_back(a.value("v1").toInt(), a.value("v2").toInt(),
+                                                             a.value("v3").toInt());
+                else
+                    children[*current].push_back({{referenced(a, part), a.value("objectid").toInt()},
+                                                  matrix(a.value("transform").toString())});
+            } else if (n == QLatin1String("item") && part == root)
+                build.push_back({{referenced(a, part), a.value("objectid").toInt()},
+                                 matrix(a.value("transform").toString())});
+        }
+        if (r.hasError())
+            throw std::runtime_error(r.errorString().toStdString());
     }
-    if (r.hasError())
-        throw std::runtime_error(r.errorString().toStdString());
     Mesh out;
     out.name = filename;
-    std::function<void(int, Eigen::Matrix4d, std::set<int>)> add = [&](int id, Eigen::Matrix4d t,
-                                                                       std::set<int> seen) {
+    std::function<void(const ObjectKey &, Eigen::Matrix4d, std::set<ObjectKey>)> add =
+        [&](const ObjectKey &id, Eigen::Matrix4d t, std::set<ObjectKey> seen) {
         if (!seen.insert(id).second)
             throw std::runtime_error("Cyclic 3MF assembly");
         if (!objects.count(id))
@@ -319,7 +443,10 @@ Mesh load_mesh(const QString &filename) {
             }
         }
     }
-    weld_mesh_vertices(m);
+    // STEP seams share exact OCCT nodes. STL/OBJ/3MF exporters round shared vertices
+    // independently (single-precision STL is ~1e-5 mm at 100 mm), so weld those more loosely.
+    bool step = filename.endsWith(".step", Qt::CaseInsensitive) || filename.endsWith(".stp", Qt::CaseInsensitive);
+    weld_mesh_vertices(m, step ? 1e-7 : 1e-5);
     if (m.empty())
         throw std::runtime_error("Mesh contains no valid triangles");
     return m;
@@ -379,6 +506,7 @@ VolumeMesh tetrahedralize(const Mesh &source, double maxVolume) {
         throw std::runtime_error("Tetrahedral meshing failed (code " + std::to_string(code) + ")");
     }
     VolumeMesh result;
+    InsideTester inside(mesh);
     for (int i = 0; i < out.numberofpoints; ++i)
         result.vertices.emplace_back(out.pointlist[3 * i], out.pointlist[3 * i + 1],
                                      out.pointlist[3 * i + 2]);
@@ -389,7 +517,7 @@ VolumeMesh tetrahedralize(const Mesh &source, double maxVolume) {
         Vec3 center = Vec3::Zero();
         for (int node : t.nodes)
             center += result.vertices[node] / 4;
-        if (contains(mesh, center))
+        if (inside.contains(center))
             result.cells.push_back(t);
     }
     std::vector<Vec3> retained;

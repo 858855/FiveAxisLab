@@ -174,6 +174,10 @@ struct StressField {
     std::vector<double> scalar;
     Mat3 sample(const Vec3 &p, bool *covered = nullptr) const;
     double scalar_at(const Vec3 &p, bool *covered = nullptr) const;
+    // First cell containing p (lowest index, as a linear scan finds it) with its weights, or -1.
+    int locate(const Vec3 &p, Eigen::Vector4d &weights) const;
+    // Lazily built grid of cells for locate(); rebuilt when the mesh changes.
+    mutable std::shared_ptr<const struct StressCellIndex> cellIndex;
 };
 struct Material {
     double young = 2200, poisson = 0.35, transverseYoung = 1200;
@@ -362,6 +366,8 @@ struct Project {
     QString pathProcessFingerprint;
     QString filamentName = "Generic PLA";
     double filamentDensity = 1.24, filamentCost = 25;
+    // Single-object export heats to these before printing; zero leaves a heater to the start script.
+    double nozzleTemperature = 210, bedTemperature = 60, fanSpeed = 1;
     CollisionReport report;
     QStringList diagnostics;
     bool depositionValid = false;

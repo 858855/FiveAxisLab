@@ -993,9 +993,8 @@ void time_plate(Project &p) {
         auto &b = p.path[i];
         auto x = sample_axes(p, a), y = sample_axes(p, b);
         double distance = (y.xyz - x.xyz).norm(), angle = std::max(std::abs(y.a - x.a), std::abs(y.b - x.b));
-        double dt = std::max({.001, b.dwell, distance / p.machine.linearSpeed, angle / p.machine.angularSpeed,
-                              2 * std::sqrt(distance / p.machine.linearAccel),
-                              2 * std::sqrt(angle / p.machine.angularAccel)});
+        // Cruise time only; see time_path for why acceleration is left to firmware look-ahead.
+        double dt = std::max({.001, b.dwell, distance / p.machine.linearSpeed, angle / p.machine.angularSpeed});
         if (b.event == EventKind::Motion) {
             double length = (b.position - a.position).norm();
             dt = std::max(dt, length / std::max(.1, b.speed));

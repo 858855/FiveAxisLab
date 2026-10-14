@@ -10,6 +10,8 @@
 #include "core/profile.h"
 #include "core/nonplanar.h"
 #include <QFile>
+#include <QJsonArray>
+#include <zip.h>
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
 #include <cmath>
@@ -17,9 +19,241 @@
 #include <algorithm>
 #include <stdexcept>
 using namespace fiveaxis;
+// Closed prism from an XZ profile extruded along Y; the fan from vertex 0 must see every vertex.
+static Mesh extrude_profile(const std::vector<Eigen::Vector2d> &xz, double depth) {
+    Mesh m;
+    int n = int(xz.size());
+    for (double y : {0.0, depth})
+        for (const auto &q : xz)
+            m.vertices.emplace_back(q.x(), y, q.y());
+    for (int i = 1; i + 1 < n; ++i) {
+        m.triangles.emplace_back(0, i + 1, i);
+        m.triangles.emplace_back(n, n + i, n + i + 1);
+    }
+    for (int i = 0; i < n; ++i) {
+        int j = (i + 1) % n;
+        m.triangles.emplace_back(i, j, n + j);
+        m.triangles.emplace_back(i, n + j, n + i);
+    }
+    return m;
+}
+static Project planar_fixture(const Mesh &part) {
+    auto p = demo_project();
+    p.part = part;
+    p.volume = {};
+    p.process.layerHeight = .4;
+    p.process.firstLayerHeight = .4;
+    p.process.width = .6;
+    p.process.wallCount = 1;
+    p.process.infill = .2;
+    p.process.curved = false;
+    p.process.supportMode = SupportMode::None;
+    return p;
+}
 class CoreTests : public QObject {
     Q_OBJECT
   private Q_SLOTS:
+    void shells_follow_exposed_surfaces() {
+        // L profile: the shelf top at z=4 is exposed although the part continues to z=8.
+        auto p = planar_fixture(extrude_profile({{-4, 0}, {4, 0}, {4, 4}, {0, 4}, {0, 8}, {-4, 8}}, 6));
+        p.process.topShellLayers = 3;
+        p.process.bottomShellLayers = 2;
+        try {
+            slice_project(p);
+        } catch (const std::exception &e) {
+            QFAIL(e.what());
+        }
+        double shelfSolid = 0, shelfSparse = 0, midSparse = 0;
+        for (size_t i = 1; i < p.path.size(); ++i) {
+            const auto &s = p.path[i];
+            if (s.deltaE <= 0)
+                continue;
+            // Length of this straight move inside the shelf window 1.2 < x < 2.8.
+            Vec3 a = p.path[i - 1].position, d = s.position - a;
+            double t0 = 0, t1 = 1;
+            if (std::abs(d.x()) < 1e-12) {
+                if (a.x() <= 1.2 || a.x() >= 2.8)
+                    continue;
+            } else {
+                double u = (1.2 - a.x()) / d.x(), v = (2.8 - a.x()) / d.x();
+                t0 = std::max(0.0, std::min(u, v));
+                t1 = std::min(1.0, std::max(u, v));
+            }
+            if (t1 <= t0)
+                continue;
+            double length = d.norm() * (t1 - t0);
+            bool solid = s.role == Role::TopSurface || s.role == Role::SolidInfill;
+            if (s.position.z() > 4 - 3 * .4 + 1e-6 && s.position.z() < 4 + 1e-6) {
+                shelfSolid += solid ? length : 0;
+                shelfSparse += s.role == Role::Infill ? length : 0;
+            }
+            if (s.position.z() > 1.9 && s.position.z() < 2.1)
+                midSparse += s.role == Role::Infill ? length : 0;
+        }
+        QVERIFY(shelfSolid > 1);
+        QCOMPARE(shelfSparse, 0.0);
+        QVERIFY(midSparse > 0);
+    }
+    void outer_wall_at_half_width() {
+        // Orca places the outer wall centerline half a line width inside the contour.
+        auto p = planar_fixture(box_mesh(Vec3(0, 0, 1), Vec3(8, 8, 2)));
+        slice_project(p);
+        double extreme = -1e9;
+        for (const auto &s : p.path)
+            if (s.role == Role::OuterWall && s.deltaE > 0 && s.layer == 1)
+                extreme = std::max(extreme, s.position.x());
+        QVERIFY(std::abs(extreme - (4 - .3)) < 1e-6);
+    }
+    void stepped_parts_do_not_need_a_volume_mesh() {
+        // Two overlapping boxes form a self-intersecting surface that the tetrahedral mesher
+        // rejects; planar layers are still cut directly from the surface mesh.
+        Mesh both = box_mesh(Vec3(0, 0, 1), Vec3(6, 4, 2));
+        Mesh second = box_mesh(Vec3(2, 0, 1), Vec3(6, 4, 2));
+        int offset = int(both.vertices.size());
+        both.vertices.insert(both.vertices.end(), second.vertices.begin(), second.vertices.end());
+        for (auto t : second.triangles)
+            both.triangles.push_back(t + Eigen::Vector3i::Constant(offset));
+        auto p = planar_fixture(both);
+        try {
+            slice_project(p);
+        } catch (const std::exception &e) {
+            QFAIL(e.what());
+        }
+        double low = 1e9, high = -1e9;
+        for (const auto &s : p.path)
+            if (s.role == Role::OuterWall && s.deltaE > 0) {
+                low = std::min(low, s.position.x());
+                high = std::max(high, s.position.x());
+            }
+        QVERIFY(std::abs(low - (-3 + .3)) < 1e-4 && std::abs(high - (5 - .3)) < 1e-4);
+        QVERIFY(p.deposition.coverage > .5);
+    }
+    void export_heats_and_keeps_requested_speed() {
+        Project p;
+        p.machine.layout = Layout::Cartesian3Axis;
+        p.machine.controller = Controller::GenericMarlin;
+        p.machine.clearance = .01;
+        p.machine.linearAccel = 500;
+        p.nozzleTemperature = 215;
+        p.bedTemperature = 65;
+        Component c;
+        c.id = c.name = "Nozzle";
+        c.nozzle = true;
+        c.mesh = cylinder_mesh(Vec3(0, 0, .3), .05, .2);
+        p.toolhead.components.push_back(c);
+        // Short collinear segments: per-segment stop-start timing used to cap these near 9 mm/s.
+        for (int i = 0; i <= 10; ++i) {
+            Sample s;
+            s.position = s.joint.xyz = Vec3(-2.5 + .5 * i, 0, .2);
+            s.surfaceNormal = Vec3::UnitZ();
+            s.role = p.path.empty() ? Role::Travel : Role::Wall;
+            s.speed = 40;
+            s.layer = 1;
+            if (!p.path.empty())
+                s.deltaE = (s.position - p.path.back().position).norm() * bead_area(s.width, s.height) /
+                           (pi * std::pow(p.machine.filamentDiameter / 2, 2));
+            p.path.push_back(s);
+        }
+        time_path(p);
+        p.depositionValid = true;
+        p.report = validate_motion(p);
+        QVERIFY(p.report.exportable());
+        auto gcode = export_gcode(p);
+        QVERIFY(gcode.indexOf("M190 S65") >= 0 && gcode.indexOf("M109 S215") >= 0);
+        QVERIFY(gcode.indexOf("M109 S215") < gcode.indexOf("\nG1 "));
+        QVERIFY(gcode.contains("M104 S0") && gcode.contains("M140 S0"));
+        int extruding = 0;
+        for (const auto &line : gcode.split('\n'))
+            if (line.startsWith("G1 ") && line.contains(" E0.0")) {
+                auto feed = QRegularExpression("F([0-9.]+)").match(line);
+                QVERIFY(feed.hasMatch());
+                QVERIFY(std::abs(feed.captured(1).toDouble() - 40 * 60) < 1e-3);
+                ++extruding;
+            }
+        QCOMPARE(extruding, 10);
+        auto replay = replay_gcode(p, gcode);
+        QVERIFY(validate_motion(replay).exportable());
+    }
+    void orca_percent_widths_and_small_perimeter_radius() {
+        QStringList notes;
+        auto s = import_orca_process({{"nozzle_diameter", QJsonArray{"0.6"}},
+                                      {"line_width", "110%"},
+                                      {"outer_wall_line_width", "0.62"},
+                                      {"small_perimeter_threshold", "5"}},
+                                     ProcessSettings{}, notes);
+        QVERIFY(std::abs(s.width - .66) < 1e-12);
+        QVERIFY(std::abs(s.outerWallWidth - .62) < 1e-12);
+        // Orca's threshold is a radius: an 8 mm box loop (32 mm) is below 2*pi*5 and slows down.
+        auto p = planar_fixture(box_mesh(Vec3(0, 0, 1), Vec3(8, 8, 2)));
+        p.process.smallWallThreshold = 5;
+        p.process.smallWallSpeed = .5;
+        p.process.outerWallSpeed = 20;
+        slice_project(p);
+        bool slowed = false;
+        for (const auto &x : p.path)
+            if (x.role == Role::OuterWall && x.deltaE > 0) {
+                QCOMPARE(x.speed, 10.0);
+                slowed = true;
+            }
+        QVERIFY(slowed);
+    }
+    void parallel_validation_matches_sequential() {
+        auto p = planar_fixture(box_mesh(Vec3(0, 0, 1), Vec3(6, 6, 2)));
+        slice_project(p);
+        p.compute.threads = 1;
+        auto sequential = validate_motion(p);
+        p.compute.threads = 4;
+        auto parallel = validate_motion(p);
+        QCOMPARE(int(parallel.status), int(sequential.status));
+        QCOMPARE(parallel.events.size(), sequential.events.size());
+        QCOMPARE(parallel.checkedIntervals, sequential.checkedIntervals);
+        QVERIFY(std::abs(parallel.minimumClearance - sequential.minimumClearance) < 1e-9);
+        QVERIFY(sequential.checkedIntervals > 100);
+        // A forced collision is still found at the same movement.
+        auto blocked = p;
+        blocked.fixtures.push_back({"Obstacle", box_mesh(Vec3(0, 0, 3), Vec3(1, 1, 6)), false});
+        blocked.compute.threads = 1;
+        auto first = validate_motion(blocked);
+        blocked.compute.threads = 4;
+        auto second = validate_motion(blocked);
+        QCOMPARE(int(first.status), int(Status::Collision));
+        QCOMPARE(int(second.status), int(Status::Collision));
+        QCOMPARE(second.events.front().move, first.events.front().move);
+    }
+    void production_3mf_parts() {
+        // Orca/Bambu/Prusa project files keep meshes in 3D/Objects/*.model, referenced by p:path.
+        QTemporaryDir dir;
+        QString file = dir.filePath("project.3mf");
+        int error = 0;
+        zip_t *z = zip_open(file.toUtf8().constData(), ZIP_CREATE | ZIP_TRUNCATE, &error);
+        QVERIFY(z);
+        QByteArray root = "<?xml version=\"1.0\"?>\n"
+            "<model unit=\"millimeter\" xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\"\n"
+            " xmlns:p=\"http://schemas.microsoft.com/3dmanufacturing/production/2015/06\">\n"
+            " <resources><object id=\"2\" type=\"model\"><components>\n"
+            "  <component p:path=\"/3D/Objects/object_1.model\" objectid=\"1\" transform=\"1 0 0 0 1 0 0 0 1 10 0 0\"/>\n"
+            " </components></object></resources>\n"
+            " <build><item objectid=\"2\"/></build></model>";
+        Mesh box = box_mesh(Vec3(0, 0, 1), Vec3(2, 2, 2));
+        QByteArray part = "<?xml version=\"1.0\"?>\n"
+            "<model unit=\"millimeter\" xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\">\n"
+            " <resources><object id=\"1\" type=\"model\"><mesh><vertices>";
+        for (const auto &v : box.vertices)
+            part += QString("<vertex x=\"%1\" y=\"%2\" z=\"%3\"/>").arg(v.x()).arg(v.y()).arg(v.z()).toUtf8();
+        part += "</vertices><triangles>";
+        for (const auto &t : box.triangles)
+            part += QString("<triangle v1=\"%1\" v2=\"%2\" v3=\"%3\"/>").arg(t[0]).arg(t[1]).arg(t[2]).toUtf8();
+        part += "</triangles></mesh></object></resources><build/></model>";
+        for (auto [name, bytes] : {std::make_pair("3D/3dmodel.model", &root),
+                                   std::make_pair("3D/Objects/object_1.model", &part)}) {
+            auto source = zip_source_buffer(z, bytes->constData(), bytes->size(), 0);
+            QVERIFY(source && zip_file_add(z, name, source, ZIP_FL_OVERWRITE) >= 0);
+        }
+        QCOMPARE(zip_close(z), 0);
+        auto mesh = load_mesh(file);
+        QCOMPARE(int(mesh.triangles.size()), 12);
+        QVERIFY(std::abs(mesh.bounds().min().x() - 9) < 1e-9 && std::abs(mesh.bounds().max().x() - 11) < 1e-9);
+    }
     void cartesian_nonplanar_slicing(){
         auto p=nonplanar_cartesian_project();p.process.layerHeight=.6;p.process.width=.8;p.process.wallCount=1;p.process.infill=.2;
         try{slice_project(p);}catch(const std::exception &e){QFAIL(e.what());}

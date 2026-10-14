@@ -106,6 +106,12 @@ struct CollisionScene::Impl {
         QString objectId;
         Vec3 center = Vec3::Zero();
         double radius = 0;
+        // Deposited beads are boxes: pose of the box centre and half extents.
+        Transform boxPose = Transform::Identity();
+        Vec3 half = Vec3::Zero();
+        // A group box contains consecutive collinear bead pieces (its members). Only the group is
+        // in the broad phase; members are evaluated when the group cannot rule them out.
+        std::vector<Obstacle *> members;
     };
     std::vector<Tool> tools;
     struct Interface {
@@ -123,7 +129,7 @@ struct CollisionScene::Impl {
     QString activeObject;
     std::map<std::pair<QString, QString>, FixtureInterface> fixtureInterfaces;
     bool movingPairs = false;
-    std::vector<std::unique_ptr<Obstacle>> world, part;
+    std::vector<std::unique_ptr<Obstacle>> world, part, staged, groups;
     fcl::DynamicAABBTreeCollisionManagerd worldManager, partManager;
     double radius = 1;
     mutable size_t checkedStaticBodies = 0;
@@ -232,9 +238,82 @@ CollisionScene::CollisionScene(const Project &p) : impl(std::make_unique<Impl>(p
 CollisionScene::~CollisionScene() = default;
 void CollisionScene::deposit(const Vec3 &a, const Vec3 &b, double width, double height, Role role,
                              const Vec3 &normal, const QString &objectId) {
+    stage_deposit(a, b, width, height, role, normal, objectId);
+    for (auto &o : impl->staged) {
+        impl->partManager.registerObject(o->object.get());
+        impl->part.push_back(std::move(o));
+        if (impl->part.size() % 128 == 0)
+            impl->partManager.update();
+    }
+    impl->staged.clear();
+}
+size_t CollisionScene::staged_count() const {
+    return impl->staged.size();
+}
+void CollisionScene::commit_staged() {
+    // Validation steps lay beads down in 0.2 mm pieces that overlap along their line. Consecutive
+    // pieces with one cross-section and orientation on one line are covered by a single group box
+    // (at most 5 mm long): one distance query to the group then bounds all of its pieces.
+    auto &staged = impl->staged;
+    for (size_t i = 0; i < staged.size();) {
+        auto *first = staged[i].get();
+        Vec3 axis = first->boxPose.linear().col(0);
+        double along = first->boxPose.translation().dot(axis);
+        double low = along - first->half.x(), high = along + first->half.x();
+        size_t j = i + 1;
+        while (j < staged.size() && j - i < 64) {
+            const auto *next = staged[j].get();
+            if (next->name != first->name || next->objectId != first->objectId ||
+                (next->boxPose.linear() - first->boxPose.linear()).norm() > 1e-9 ||
+                std::abs(next->half.y() - first->half.y()) > 1e-12 ||
+                std::abs(next->half.z() - first->half.z()) > 1e-12)
+                break;
+            Vec3 offset = next->boxPose.translation() - first->boxPose.translation();
+            if ((offset - axis * axis.dot(offset)).norm() > 1e-9)
+                break;
+            double centre = next->boxPose.translation().dot(axis);
+            double nextLow = centre - next->half.x(), nextHigh = centre + next->half.x();
+            // A piece must touch the group so the group box stays covered by its pieces.
+            if (nextLow > high + 1e-9 || nextHigh < low - 1e-9 ||
+                std::max(high, nextHigh) - std::min(low, nextLow) > 5)
+                break;
+            low = std::min(low, nextLow);
+            high = std::max(high, nextHigh);
+            ++j;
+        }
+        if (j - i > 1) {
+            auto group = std::make_unique<Impl::Obstacle>();
+            group->name = first->name;
+            group->objectId = first->objectId;
+            group->deposited = true;
+            group->error = first->error;
+            group->boxPose = first->boxPose;
+            group->boxPose.translation() += axis * ((low + high) / 2 - along);
+            group->half = Vec3((high - low) / 2, first->half.y(), first->half.z());
+            group->center = group->boxPose.translation();
+            group->radius = group->half.norm();
+            group->object =
+                std::make_shared<fcl::CollisionObjectd>(std::make_shared<fcl::Boxd>(2 * group->half), group->boxPose);
+            group->object->setUserData(group.get());
+            for (size_t k = i; k < j; ++k)
+                group->members.push_back(staged[k].get());
+            impl->partManager.registerObject(group->object.get());
+            impl->groups.push_back(std::move(group));
+        } else
+            impl->partManager.registerObject(first->object.get());
+        for (size_t k = i; k < j; ++k)
+            impl->part.push_back(std::move(staged[k]));
+        i = j;
+    }
+    if (!staged.empty())
+        impl->partManager.update();
+    staged.clear();
+}
+size_t CollisionScene::stage_deposit(const Vec3 &a, const Vec3 &b, double width, double height, Role role,
+                                     const Vec3 &normal, const QString &objectId) {
     double length = (b - a).norm();
     if (length < 1e-10)
-        return;
+        return impl->staged.size();
     int count = std::max(1, int(std::ceil(length / std::max(width, .2))));
     for (int i = 0; i < count; ++i) {
         Vec3 x = a + (b - a) * double(i) / count, y = a + (b - a) * double(i + 1) / count;
@@ -266,19 +345,19 @@ void CollisionScene::deposit(const Vec3 &a, const Vec3 &b, double width, double 
         pose.linear().col(2) = up;
         // Bound the rounded cross section without extending above its nozzle-top surface.
         auto g = std::make_shared<fcl::Boxd>((y - x).norm() + width, width, height);
+        o->boxPose = pose;
+        o->half = Vec3((y - x).norm() + width, width, height) / 2;
         o->object = std::make_shared<fcl::CollisionObjectd>(g, pose);
         o->object->setUserData(o.get());
-        impl->partManager.registerObject(o->object.get());
-        impl->part.push_back(std::move(o));
+        impl->staged.push_back(std::move(o));
     }
-    if (impl->part.size() % 128 == 0)
-        impl->partManager.update();
+    return impl->staged.size();
 }
 void CollisionScene::set_active_object(const QString &id) {
     impl->activeObject = id;
 }
 CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, const Vec3 &activePoint,
-                                          double margin) const {
+                                          double margin, size_t staged) const {
     const auto &p = impl->project;
     CollisionEvent result;
     result.status = Status::Clear;
@@ -305,8 +384,8 @@ CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, c
         const std::map<std::pair<QString, QString>, Impl::FixtureInterface> *interfaces;
         QString activeObject;
     };
-    auto callback = [](fcl::CollisionObjectd *first, fcl::CollisionObjectd *second, void *data,
-                       double &distance) -> bool {
+    static auto evaluate = [](fcl::CollisionObjectd *first, fcl::CollisionObjectd *second, void *data,
+                              double &distance) -> bool {
         auto &query = *static_cast<Query *>(data);
         auto *obstacle = static_cast<Impl::Obstacle *>(second->getUserData());
         if (!obstacle) {
@@ -446,6 +525,62 @@ CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, c
         }
         return false;
     };
+    auto callback = [](fcl::CollisionObjectd *first, fcl::CollisionObjectd *second, void *data,
+                       double &distance) -> bool {
+        auto *obstacle = static_cast<Impl::Obstacle *>(second->getUserData());
+        if (!obstacle) {
+            std::swap(first, second);
+            obstacle = static_cast<Impl::Obstacle *>(second->getUserData());
+        }
+        if (!obstacle || obstacle->members.empty())
+            return evaluate(first, second, data, distance);
+        // Every member lies inside the group box, so a member's surface distance is at least the
+        // group's, and its clearance is at least that minus the errors (masked and gated nozzle
+        // clearances are never below the full-mesh distance). A group that cannot reach below the
+        // current minimum or the required clearance is skipped, unless the group box lies inside
+        // the tool (it does not touch the tool surface and its centre is inside the mesh), where
+        // the members' containment checks apply.
+        auto &query = *static_cast<Query *>(data);
+        double errors = query.tool->component->mesh.error + obstacle->error;
+        auto threshold = [&] { return std::max(query.required, std::max(0.0, query.result->clearance)); };
+        // Cheap bound first: the gap between the tool's local bounding box and a box expressed in
+        // tool coordinates. It never exceeds the surface distance, and a positive gap places the
+        // box outside the tool, which excludes containment.
+        Transform toolInverse = first->getTransform().inverse();
+        auto gap = [&](const Impl::Obstacle &box) {
+            Transform local = toolInverse * box.boxPose;
+            Vec3 extent = local.linear().cwiseAbs() * box.half, centre = local.translation();
+            return (query.tool->bounds.min() - (centre + extent))
+                .cwiseMax((centre - extent) - query.tool->bounds.max())
+                .cwiseMax(Vec3::Zero())
+                .norm();
+        };
+        if (gap(*obstacle) - errors >= threshold())
+            return false;
+        fcl::DistanceRequestd request(true, false, 0, 0, 1e-8, fcl::GST_LIBCCD);
+        fcl::DistanceResultd d;
+        fcl::distance(first, second, request, d);
+        if (std::isfinite(d.min_distance) && d.min_distance > 0 && d.min_distance - errors >= threshold()) {
+            Vec3 local = toolInverse * obstacle->center;
+            if (!(query.tool->bounds.contains(local) && contains(query.tool->component->mesh, local)))
+                return false;
+        }
+        // Members nearest the tool first, each behind the same cheap bound; the threshold tightens
+        // as members are evaluated.
+        std::vector<std::pair<double, Impl::Obstacle *>> members;
+        members.reserve(obstacle->members.size());
+        for (auto *member : obstacle->members)
+            members.emplace_back(gap(*member), member);
+        std::sort(members.begin(), members.end(),
+                  [](const auto &a, const auto &b) { return a.first < b.first; });
+        for (const auto &[lower, member] : members) {
+            if (lower > 0 && lower - errors >= threshold())
+                break;
+            if (evaluate(first, member->object.get(), data, distance))
+                return true;
+        }
+        return false;
+    };
     for (auto &tool : impl->tools) {
         Transform world = component_pose(p.machine, p.active_toolhead(), *tool.component, q);
         for (int frame = 0; frame < 2; ++frame) {
@@ -464,8 +599,20 @@ CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, c
                         impl->activeObject};
             if (frame == 0)
                 impl->worldManager.distance(&object, &query, callback);
-            else
+            else {
                 impl->partManager.distance(&object, &query, callback);
+                // Staged deposits visible to this query, pruned like the broad phase by the
+                // distance between bounding boxes and the clearance found so far.
+                object.computeAABB();
+                for (size_t k = 0; k < staged && k < impl->staged.size() && result.status == Status::Clear; ++k) {
+                    auto *other = impl->staged[k]->object.get();
+                    if (object.getAABB().distance(other->getAABB()) > std::max(0.0, result.clearance))
+                        continue;
+                    double bound = std::max(0.0, result.clearance);
+                    if (callback(&object, other, &query, bound))
+                        break;
+                }
+            }
             if (result.status != Status::Clear)
                 return result;
         }
@@ -615,7 +762,7 @@ CollisionEvent CollisionScene::check_pose(const JointState &q, bool extruding, c
 }
 bool CollisionScene::check_interval(const JointState &a, const JointState &b, bool extruding, const Vec3 &pa,
                                     const Vec3 &pb, int move, double ta, double tb, CollisionReport &report,
-                                    std::atomic_bool *cancel) const {
+                                    std::atomic_bool *cancel, size_t staged) const {
     int iterations = 0;
     bool exhausted = false;
     std::function<bool(double, double, int)> check = [&](double left, double right, int depth) {
@@ -642,7 +789,7 @@ bool CollisionScene::check_interval(const JointState &a, const JointState &b, bo
         double mid = (left + right) / 2;
         JointState q = interpolate_motion(impl->project.machine, impl->project.active_toolhead(), a, b, mid);
         Vec3 point = part_position(impl->project.machine, q);
-        auto hit = check_pose(q, extruding, point);
+        auto hit = check_pose(q, extruding, point, -1, staged);
         ++report.checkedIntervals;
         report.minimumClearance = std::min(report.minimumClearance, hit.clearance);
         if (hit.status != Status::Clear) {
@@ -801,7 +948,82 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
         r.events.push_back(initial);
         r.status = Status::Collision;
     }
-    for (size_t i = 1; i < p.path.size(); ++i) {
+    // Every check must see the material deposited before it. Steps are processed in blocks:
+    // all steps of a block are checked in parallel against the material committed before the
+    // block plus that block's earlier steps, held as staged deposits, and results are merged in
+    // path order, so the outcome matches a sequential pass.
+    struct Step {
+        int move = 0;
+        JointState x, y;
+        Vec3 pa = Vec3::Zero(), pb = Vec3::Zero();
+        bool extruding = false;
+        double ta = 0, tb = 0;
+        size_t staged = 0;
+    };
+    struct Outcome {
+        CollisionEvent end;
+        CollisionReport interval;
+    };
+    // Workpiece-body checks keep mutable per-scene caches, so they stay sequential.
+    int threads = p.checkWorkpieceBodies ? 1 : compute_threads(p.compute);
+    size_t blockSize = threads > 1 ? size_t(threads) * 48 : 1;
+    std::vector<Step> block;
+    bool stop = false;
+    auto flush = [&] {
+        if (block.empty() || stop)
+            return;
+        std::vector<Outcome> outcomes(block.size());
+        std::atomic_bool halted{false};
+        ComputeSettings settings = p.compute;
+        settings.threads = threads;
+        parallel_for(block.size(), settings, [&](size_t j) {
+            if (halted.load() || (cancel && cancel->load())) {
+                halted = true;
+                return;
+            }
+            const auto &s = block[j];
+            auto &o = outcomes[j];
+            o.interval.status = Status::Clear;
+            o.end = scene.check_pose(s.y, s.extruding, s.pb, -1, s.staged);
+            if (o.end.status == Status::Clear)
+                scene.check_interval(s.x, s.y, s.extruding, s.pa, s.pb, s.move, s.ta, s.tb, o.interval, cancel,
+                                     s.staged);
+        });
+        for (size_t j = 0; j < block.size() && !stop; ++j) {
+            if (cancel && cancel->load()) {
+                r.status = Status::Cancelled;
+                stop = true;
+                break;
+            }
+            auto &o = outcomes[j];
+            r.minimumClearance = std::min(r.minimumClearance, o.end.clearance);
+            if (o.end.status != Status::Clear) {
+                o.end.move = block[j].move;
+                o.end.time = block[j].tb;
+                r.events.push_back(o.end);
+                r.status = Status::Collision;
+            } else {
+                r.checkedIntervals += o.interval.checkedIntervals;
+                r.minimumClearance = std::min(r.minimumClearance, o.interval.minimumClearance);
+                r.events.insert(r.events.end(), o.interval.events.begin(), o.interval.events.end());
+                if (o.interval.status == Status::Cancelled)
+                    r.status = Status::Cancelled;
+                else if (o.interval.status == Status::Collision && r.status != Status::Cancelled)
+                    r.status = Status::Collision;
+                else if (o.interval.status == Status::Unresolved && r.status == Status::Clear)
+                    r.status = Status::Unresolved;
+            }
+            if (r.status == Status::Cancelled)
+                stop = true;
+            else if (r.events.size() > 200) {
+                r.status = Status::Collision;
+                stop = true;
+            }
+        }
+        scene.commit_staged();
+        block.clear();
+    };
+    for (size_t i = 1; i < p.path.size() && !stop; ++i) {
         auto &a = p.path[i - 1];
         auto &b = p.path[i];
         if (cancel && cancel->load()) {
@@ -815,37 +1037,32 @@ CollisionReport validate_motion(const Project &p, std::atomic_bool *cancel,
             throw std::runtime_error("Deposition movement exceeds accuracy budget");
         for (int k = 0; k < steps; ++k) {
             double u = double(k) / steps, v = double(k + 1) / steps;
-            JointState x = interpolate_motion(p.machine, p.active_toolhead(), a.joint, b.joint, u),
-                       y = interpolate_motion(p.machine, p.active_toolhead(), a.joint, b.joint, v);
-            Vec3 pa = part_position(p.machine, x), pb = part_position(p.machine, y);
-            auto end = scene.check_pose(y, b.deltaE > 0, pb);
-            r.minimumClearance = std::min(r.minimumClearance, end.clearance);
-            if (end.status != Status::Clear) {
-                end.move = int(i);
-                end.time = a.time + (b.time - a.time) * v;
-                r.events.push_back(end);
-                r.status = Status::Collision;
-            } else
-                scene.check_interval(x, y, b.deltaE > 0, pa, pb, int(i), a.time + (b.time - a.time) * u,
-                                     a.time + (b.time - a.time) * v, r, cancel);
+            Step s;
+            s.move = int(i);
+            s.x = interpolate_motion(p.machine, p.active_toolhead(), a.joint, b.joint, u);
+            s.y = interpolate_motion(p.machine, p.active_toolhead(), a.joint, b.joint, v);
+            s.pa = part_position(p.machine, s.x);
+            s.pb = part_position(p.machine, s.y);
+            s.extruding = b.deltaE > 0;
+            s.ta = a.time + (b.time - a.time) * u;
+            s.tb = a.time + (b.time - a.time) * v;
+            s.staged = scene.staged_count();
+            block.push_back(s);
             if (b.deltaE > 0 && b.role != Role::Retract)
-                scene.deposit(
-                    pa, pb, b.width, b.height, b.role,
+                scene.stage_deposit(
+                    s.pa, s.pb, b.width, b.height, b.role,
                     p.machine.rotary_axes()
                         ? part_direction(p.machine, p.active_toolhead(),
-                                         interpolate_motion(p.machine, p.active_toolhead(), x, y, .5))
+                                         interpolate_motion(p.machine, p.active_toolhead(), s.x, s.y, .5))
                         : (surface_normal(a) * (1 - (u + v) / 2) + surface_normal(b) * ((u + v) / 2))
                               .normalized());
-            if (r.events.size() > 200 || r.status == Status::Cancelled)
-                break;
+            if (block.size() >= blockSize)
+                flush();
         }
-        if (progress)
+        if (progress && !stop)
             progress(double(i) / p.path.size());
-        if (r.events.size() > 200) {
-            r.status = Status::Collision;
-            break;
-        }
     }
+    flush();
     if (p.deposition.checked && !p.depositionValid && r.status != Status::Cancelled) {
         if (r.status == Status::Clear)
             r.status = Status::Unresolved;

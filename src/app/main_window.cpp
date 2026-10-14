@@ -205,6 +205,25 @@ MainWindow::MainWindow() : project(demo_project()) {
     materialRow->addWidget(filamentDensity);
     materialRow->addWidget(filamentCost);
     ff->addRow(material);
+    auto heat = new QWidget;
+    auto heatRow = new QHBoxLayout(heat);
+    heatRow->setContentsMargins(0, 0, 0, 0);
+    nozzleTemperature = spin(210, 0, 500, 0);
+    nozzleTemperature->setSuffix(" °C nozzle");
+    nozzleTemperature->setObjectName("nozzleTemperature");
+    nozzleTemperature->setToolTip("Exported as M104/M109 before printing; 0 leaves heating to the start G-code");
+    bedTemperature = spin(60, 0, 200, 0);
+    bedTemperature->setSuffix(" °C bed");
+    bedTemperature->setObjectName("bedTemperature");
+    bedTemperature->setToolTip("Exported as M140/M190 before printing; 0 leaves heating to the start G-code");
+    fanSpeed = spin(100, 0, 100, 0);
+    fanSpeed->setSuffix(" % fan");
+    fanSpeed->setObjectName("fanSpeed");
+    fanSpeed->setToolTip("Part cooling from the second layer");
+    heatRow->addWidget(nozzleTemperature);
+    heatRow->addWidget(bedTemperature);
+    heatRow->addWidget(fanSpeed);
+    ff->addRow(heat);
     left->addWidget(filament);
     auto presets = new QHBoxLayout;
     auto preset = new QComboBox;
@@ -736,6 +755,9 @@ MainWindow::MainWindow() : project(demo_project()) {
         project.filamentName = filamentName->text();
         project.filamentDensity = filamentDensity->value();
         project.filamentCost = filamentCost->value();
+        project.nozzleTemperature = nozzleTemperature->value();
+        project.bedTemperature = bedTemperature->value();
+        project.fanSpeed = fanSpeed->value() / 100;
         if (project.plateEnabled && !project.materials.empty()) {
             project.materials[0].name = project.filamentName;
             project.materials[0].density = project.filamentDensity;
@@ -748,6 +770,9 @@ MainWindow::MainWindow() : project(demo_project()) {
             [filamentChanged] { filamentChanged(); });
     connect(filamentCost, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
             [filamentChanged] { filamentChanged(); });
+    for (auto *box : {nozzleTemperature, bedTemperature, fanSpeed})
+        connect(box, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
+                [filamentChanged] { filamentChanged(); });
     connect(dummyToolhead, &QCheckBox::toggled, this, [this](bool enabled) {
         if (enabled && project.dummyToolhead.components.empty())
             project.dummyToolhead = make_dummy_toolhead(project.process.nozzleDiameter);
@@ -845,7 +870,7 @@ void MainWindow::refresh() {
     paintMaterial->setEnabled(project.plateEnabled);
     motionValidated = project.report.exportable() && project.report.fingerprint == project.fingerprint();
     QSignalBlocker a(controller), b(layout), c(extension), j(dummyToolhead), densityGuard(filamentDensity),
-        costGuard(filamentCost);
+        costGuard(filamentCost), nozzleGuard(nozzleTemperature), bedGuard(bedTemperature), fanGuard(fanSpeed);
     controller->setCurrentIndex(int(project.machine.controller));
     layout->setCurrentIndex(int(project.machine.layout));
     if (auto model = qobject_cast<QStandardItemModel *>(controller->model()))
@@ -866,6 +891,9 @@ void MainWindow::refresh() {
     filamentName->setText(project.filamentName);
     filamentDensity->setValue(project.filamentDensity);
     filamentCost->setValue(project.filamentCost);
+    nozzleTemperature->setValue(project.nozzleTemperature);
+    bedTemperature->setValue(project.bedTemperature);
+    fanSpeed->setValue(project.fanSpeed * 100);
     partName->setText(project.part.empty() ? "No printable part"
                                            : QFileInfo(project.part.name).fileName() + " · Global settings");
     dummyToolhead->setChecked(project.useDummyToolhead);

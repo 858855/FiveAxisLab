@@ -1,4 +1,5 @@
 #include "core/controllers.h"
+#include "core/machine_settings.h"
 #include "core/plate.h"
 #include "main_window.h"
 #include <QGroupBox>
@@ -172,20 +173,23 @@ void MainWindow::refresh_preview(bool preserveRange) {
     double grams = 0;
     for (double amount : mass)
         grams += amount;
-    totals->setText(QString("Total filament: %1 m · %2 g\nMaterial cost: %3 EUR\nPlanned time: %4\n%5\n%6")
-                        .arg(filament / 1000, 0, 'f', 2)
-                        .arg(grams, 0, 'f', 2)
-                        .arg(materialCost, 0, 'f', 2)
-                        .arg(duration_text(total))
-                        .arg(project.filamentName)
-                        .arg(project.useDummyToolhead ? "Dummy toolhead · synthetic geometry"
-                                                      : "Configured toolhead geometry"));
+    // Planned sample times are commanded cruise times; the estimate adds acceleration.
+    double estimate = estimated_print_seconds(p);
+    totals->setText(
+        QString("Total filament: %1 m · %2 g\nMaterial cost: %3 EUR\nEstimated time: %4 (cruise %5)\n%6\n%7")
+            .arg(filament / 1000, 0, 'f', 2)
+            .arg(grams, 0, 'f', 2)
+            .arg(materialCost, 0, 'f', 2)
+            .arg(duration_text(estimate), duration_text(total))
+            .arg(project.filamentName)
+            .arg(project.useDummyToolhead ? "Dummy toolhead · synthetic geometry"
+                                          : "Configured toolhead geometry"));
     if (p.plateEnabled) {
-        QString text = QString("Plate total: %1 m, %2 g\nMaterial cost: %3 EUR\nPlanned time: %4")
+        QString text = QString("Plate total: %1 m, %2 g\nMaterial cost: %3 EUR\nEstimated time: %4 (cruise %5)")
                            .arg(filament / 1000, 0, 'f', 3)
                            .arg(grams, 0, 'f', 3)
                            .arg(materialCost, 0, 'f', 3)
-                           .arg(duration_text(total));
+                           .arg(duration_text(estimate), duration_text(total));
         for (const auto &[id, length] : used) {
             auto m = find_material(p, id);
             if (m)
