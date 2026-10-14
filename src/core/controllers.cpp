@@ -84,11 +84,37 @@ QString export_gcode(const Project &p) {
     }
     if (p.machine.controller == Controller::Klipper && !p.machine.rotary_axes())
         stream << "SET_PRESSURE_ADVANCE ADVANCE=0\n";
+    // Heat before any motion. A zero temperature leaves that heater to the machine start script.
+    if (p.bedTemperature > 0)
+        stream << "M140 S" << qRound(p.bedTemperature) << "\n";
+    if (p.nozzleTemperature > 0)
+        stream << "M104 S" << qRound(p.nozzleTemperature) << "\n";
+    if (p.bedTemperature > 0)
+        stream << "M190 S" << qRound(p.bedTemperature) << "\n";
+    if (p.nozzleTemperature > 0)
+        stream << "M109 S" << qRound(p.nozzleTemperature) << "\n";
+    bool fanOn = false;
     for (size_t i = 1; i < p.path.size(); ++i) {
         const auto &a = p.path[i - 1];
         const auto &b = p.path[i];
         auto axesA = controller_axes(p.machine, p.active_toolhead(), a.joint),
              axesB = controller_axes(p.machine, p.active_toolhead(), b.joint);
+        if (b.event == EventKind::IO) {
+            stream << b.argument << "\n";
+            if (printer_homing(b.argument)) {
+                // Homing leaves the carriage at the firmware home; re-enter the modeled pose from above.
+                stream << "G0 Z" << axesB.xyz.z() + 5 << " F600\nG0 X" << axesB.xyz.x() << " Y" << axesB.xyz.y();
+                if (p.machine.rotary_axes())
+                    stream << " A" << b.joint.a * 180 / pi << " " << p.machine.axis2() << b.joint.b * 180 / pi;
+                stream << " F" << p.process.travelSpeed * 60 << "\nG0 Z" << axesB.xyz.z() << " F600\n";
+            }
+            continue;
+        }
+        // Part cooling starts after the first layer, as in Orca's default profiles.
+        if (!fanOn && p.fanSpeed > 0 && b.deltaE > 0 && b.layer > 0) {
+            stream << "M106 S" << qRound(p.fanSpeed * 255) << "\n";
+            fanOn = true;
+        }
         double metric = feed_metric(p.machine, axesA, axesB, b.deltaE), duration = b.time - a.time;
         if (metric < 1e-12) {
             stream << "G4 P" << duration * 1000 << "\n";
@@ -120,6 +146,12 @@ QString export_gcode(const Project &p) {
     stream << "M400\n";
     if (p.machine.controller == Controller::Klipper && p.machine.klipperExtension && p.machine.rotary_axes())
         stream << "FIVEAXIS_DISABLE\n";
+    if (fanOn)
+        stream << "M107\n";
+    if (p.nozzleTemperature > 0)
+        stream << "M104 S0\n";
+    if (p.bedTemperature > 0)
+        stream << "M140 S0\n";
     return out;
 }
 Project replay_gcode(const Project &context, const QString &gcode) {
@@ -212,6 +244,10 @@ Project replay_gcode(const Project &context, const QString &gcode) {
             p.path.push_back(sample);
             continue;
         }
+        // Heater, fan and homing commands move no modeled axis; the moves after G28 that
+        // re-enter the modeled pose are replayed below like any other move.
+        if (printer_passthrough(line, true) || command == "M107")
+            continue;
         if (command == "G21" || command == "M400" || command == "M572" || command == "SET_PRESSURE_ADVANCE" ||
             command == "MANUAL_STEPPER" || command == "FIVEAXIS_ENABLE" || command == "FIVEAXIS_DISABLE")
             continue;

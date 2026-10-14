@@ -317,7 +317,12 @@ QJsonObject project_json(const Project &p) {
         {"machine", m},
         {"process", s},
         {"filament",
-         QJsonObject{{"name", p.filamentName}, {"density", p.filamentDensity}, {"cost", p.filamentCost}}},
+         QJsonObject{{"name", p.filamentName},
+                     {"density", p.filamentDensity},
+                     {"cost", p.filamentCost},
+                     {"nozzleTemperature", p.nozzleTemperature},
+                     {"bedTemperature", p.bedTemperature},
+                     {"fan", p.fanSpeed}}},
         {"stress", stress},
         {"loads", loads},
         {"comparison", comparison},
@@ -404,8 +409,12 @@ Project project_from_json(const QJsonObject &j) {
     p.filamentName = filament["name"].toString("Generic PLA");
     p.filamentDensity = filament["density"].toDouble(1.24);
     p.filamentCost = filament["cost"].toDouble(25);
+    p.nozzleTemperature = filament["nozzleTemperature"].toDouble(210);
+    p.bedTemperature = filament["bedTemperature"].toDouble(60);
+    p.fanSpeed = filament["fan"].toDouble(1);
     if (!std::isfinite(p.filamentDensity) || p.filamentDensity <= 0 || !std::isfinite(p.filamentCost) ||
-        p.filamentCost < 0)
+        p.filamentCost < 0 || !(p.nozzleTemperature >= 0 && p.nozzleTemperature <= 500) ||
+        !(p.bedTemperature >= 0 && p.bedTemperature <= 200) || !(p.fanSpeed >= 0 && p.fanSpeed <= 1))
         throw std::runtime_error("Invalid filament properties");
     p.pathProcessFingerprint = j["pathProcessFingerprint"].toString(process_fingerprint(p.process));
     p.toolhead = read_toolhead(j["toolhead"].toObject());

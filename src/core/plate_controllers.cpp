@@ -49,6 +49,8 @@ static QString state_command(const Project &p, const Sample &s) {
     case EventKind::IO:
         need(!s.argument.contains('\n') && !s.argument.contains('\r'),
              "Multiline tool action is not replayable");
+        if (printer_passthrough(s.argument))
+            return s.argument;
         need(QRegularExpression(duet      ? "^M(42|280|577)\\s"
                                 : klipper ? "^(SET_PIN|FAL_SELECT_FILAMENT|FAL_TOOL_CONFIRM)\\s"
                                           : "^M(42|280)\\s")

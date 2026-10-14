@@ -57,7 +57,7 @@ class MainWindow : public QMainWindow {
     QDoubleSpinBox *paintRadius;
     QCheckBox *painting;
     std::vector<std::vector<std::vector<fiveaxis::MaterialAssignment>>> paintHistory;
-    QDoubleSpinBox *filamentDensity, *filamentCost;
+    QDoubleSpinBox *filamentDensity, *filamentCost, *nozzleTemperature, *bedTemperature, *fanSpeed;
     QPushButton *sliceButton, *exportButton;
     bool updatingPreview = false;
     bool motionValidated = false;

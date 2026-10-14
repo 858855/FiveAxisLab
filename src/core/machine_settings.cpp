@@ -228,24 +228,100 @@ Vec3 preferred_plate_position(const MachineProfile &m) {
                 bounds.min().y() + bounds.sizes().y() * printer_number(m.printer, "preferredY", .5), 0);
 }
 double printer_move_seconds(const MachineProfile &m, const Vec3 &delta, double e, const QJsonObject &ex) {
+    // Per-axis cruise limits only. Acceleration limits are firmware settings (see
+    // printer_controller_template); they shape segments through look-ahead and are not
+    // a per-segment stop-start time, which would also lower the exported feedrate.
     double result = 0;
     const char *speed[] = {"speedX", "speedY", "speedZ", "speedE"};
-    const char *accel[] = {"accelX", "accelY", "accelZ", "accelE"};
     for (int i = 0; i < 4; ++i) {
         double d = i < 3 ? std::abs(delta[i]) : std::abs(e);
         if (m.printer.contains(speed[i]))
             result = std::max(result, d / m.printer[speed[i]].toDouble());
-        if (m.printer.contains(accel[i]))
-            result = std::max(result, 2 * std::sqrt(d / m.printer[accel[i]].toDouble()));
     }
-    auto key = e < 0 ? "accelRetract" : "accelExtrude";
-    if (e != 0 && m.printer.contains(key))
-        result = std::max(result, 2 * std::sqrt((delta.norm() > 1e-9 ? delta.norm() : std::abs(e)) /
-                                                m.printer[key].toDouble()));
     if ((delta.norm() < 1e-8 || e < 0) && ex.contains(e < 0 ? "retractSpeed" : "recoverSpeed"))
         result =
             std::max(result, std::abs(e) / printer_number(ex, e < 0 ? "retractSpeed" : "recoverSpeed", 30));
     return result;
+}
+double estimated_print_seconds(const Project &p) {
+    size_t n = p.path.size();
+    if (n < 2)
+        return 0;
+    double accel = std::min(printer_number(p.machine.printer, "accelExtrude", p.machine.linearAccel),
+                            std::min(printer_number(p.machine.printer, "accelX", p.machine.linearAccel),
+                                     printer_number(p.machine.printer, "accelY", p.machine.linearAccel)));
+    double corner = std::max(1.0, std::min(printer_number(p.machine.printer, "jerkX", 5),
+                                           printer_number(p.machine.printer, "jerkY", 5)));
+    struct Segment {
+        Vec3 delta = Vec3::Zero();
+        double length = 0, cruise = 0, fixed = 0;
+    };
+    std::vector<Segment> segments(n);
+    for (size_t i = 1; i < n; ++i) {
+        const auto &a = p.path[i - 1], &b = p.path[i];
+        auto x = p.plateEnabled ? sample_axes(p, a) : controller_axes(p.machine, p.active_toolhead(), a.joint);
+        auto y = p.plateEnabled ? sample_axes(p, b) : controller_axes(p.machine, p.active_toolhead(), b.joint);
+        double dt = b.time - a.time;
+        auto &s = segments[i];
+        s.delta = y.xyz - x.xyz;
+        s.length = s.delta.norm();
+        // Rotary-only, extruder-only and dwell movements keep their planned duration.
+        if (s.length < 1e-9 || std::abs(y.a - x.a) + std::abs(y.b - x.b) > 1e-9 || b.dwell > 0)
+            s.fixed = dt;
+        else
+            s.cruise = s.length / std::max(dt, 1e-9);
+    }
+    // Junction speed: full speed when collinear, falling to the corner speed at 90 degrees or more.
+    std::vector<double> junction(n + 1, 0);
+    for (size_t i = 1; i + 1 < n; ++i) {
+        const auto &a = segments[i], &b = segments[i + 1];
+        if (a.cruise <= 0 || b.cruise <= 0)
+            continue;
+        double c = std::clamp(a.delta.dot(b.delta) / (a.length * b.length), -1.0, 1.0);
+        double v = std::min(a.cruise, b.cruise);
+        junction[i] = c <= 0 ? std::min(v, corner) : std::max(std::min(v, corner), v * c);
+    }
+    // junction[i] is the speed at the end of segment i / start of segment i + 1.
+    for (size_t i = n - 1; i >= 1; --i)
+        if (segments[i].cruise > 0)
+            junction[i - 1] = std::min(junction[i - 1],
+                                       std::sqrt(junction[i] * junction[i] + 2 * accel * segments[i].length));
+    for (size_t i = 1; i < n; ++i)
+        if (segments[i].cruise > 0)
+            junction[i] = std::min(junction[i], std::sqrt(junction[i - 1] * junction[i - 1] +
+                                                          2 * accel * segments[i].length));
+    double total = 0;
+    for (size_t i = 1; i < n; ++i) {
+        const auto &s = segments[i];
+        if (s.cruise <= 0) {
+            total += s.fixed;
+            continue;
+        }
+        double v0 = std::min(junction[i - 1], s.cruise), v1 = std::min(junction[i], s.cruise), vc = s.cruise;
+        double up = (vc * vc - v0 * v0) / (2 * accel), down = (vc * vc - v1 * v1) / (2 * accel);
+        if (up + down > s.length) {
+            vc = std::sqrt(std::max(0.0, (2 * accel * s.length + v0 * v0 + v1 * v1) / 2));
+            up = (vc * vc - v0 * v0) / (2 * accel);
+            down = (vc * vc - v1 * v1) / (2 * accel);
+        }
+        double flat = std::max(0.0, s.length - up - down);
+        total += (vc - v0) / accel + (vc - v1) / accel + flat / std::max(vc, 1e-9);
+    }
+    return total;
+}
+bool printer_homing(const QString &line) {
+    return QRegularExpression("^G28(\\s+[XYZ]0?)*$", QRegularExpression::CaseInsensitiveOption)
+        .match(line.trimmed())
+        .hasMatch();
+}
+bool printer_passthrough(const QString &line, bool allowHoming) {
+    static const QRegularExpression safe(
+        "^(M10[49]|M14[019]|M19[01]|M10[67]|M117|M73|M204|M220|M221|M900)(\\s+[A-Z][-+0-9.]*)*(\\s+.*)?$",
+        QRegularExpression::CaseInsensitiveOption);
+    QString text = line.trimmed();
+    if (text.contains('\n') || text.contains('\r'))
+        return false;
+    return (allowHoming && printer_homing(text)) || safe.match(text).hasMatch();
 }
 bool relative_extrusion(const MachineProfile &machine) {
     return machine.printer.value("relativeE").toBool(true);
@@ -346,6 +422,17 @@ void apply_printer_path(Project &p) {
                 s.deltaE = 0;
                 s.event = EventKind::Synchronize;
                 s.dwell = .001;
+                output.push_back(s);
+                continue;
+            }
+            // Heater, fan and similar commands move no axis and are emitted verbatim. Homing is
+            // accepted only in single-object start scripts; export then re-enters the modeled pose.
+            if (printer_passthrough(line, !p.plateEnabled && QString(key) == "start")) {
+                auto s = output.back();
+                s.deltaE = 0;
+                s.role = Role::Travel;
+                s.event = EventKind::IO;
+                s.argument = line.simplified();
                 output.push_back(s);
                 continue;
             }

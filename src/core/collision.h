@@ -8,13 +8,21 @@ class CollisionScene {
     ~CollisionScene();
     CollisionScene(const CollisionScene &) = delete;
     CollisionScene &operator=(const CollisionScene &) = delete;
+    // `staged` is how many staged deposits (see stage_deposit) this query also sees.
+    // Queries are safe to run concurrently while no deposit is added or committed.
     CollisionEvent check_pose(const JointState &q, bool extruding, const Vec3 &activePoint,
-                              double margin = -1) const;
+                              double margin = -1, size_t staged = 0) const;
     bool check_interval(const JointState &a, const JointState &b, bool extruding, const Vec3 &pa,
                         const Vec3 &pb, int move, double ta, double tb, CollisionReport &report,
-                        std::atomic_bool *cancel = nullptr) const;
+                        std::atomic_bool *cancel = nullptr, size_t staged = 0) const;
     void deposit(const Vec3 &a, const Vec3 &b, double width, double height, Role role,
                  const Vec3 &normal = Vec3::UnitZ(), const QString &objectId = {});
+    // Deposits held outside the broad phase so a block of later checks can run in parallel,
+    // each seeing only the staged material before it. Returns the staged count afterwards.
+    size_t stage_deposit(const Vec3 &a, const Vec3 &b, double width, double height, Role role,
+                         const Vec3 &normal = Vec3::UnitZ(), const QString &objectId = {});
+    size_t staged_count() const;
+    void commit_staged();
     void set_active_object(const QString &objectId);
 
   private:

@@ -279,9 +279,11 @@ void time_path(Project &p) {
                           .norm(),
                angle = std::max(std::abs(b.joint.a - a.joint.a), std::abs(b.joint.b - a.joint.b));
         double bead = (b.position - a.position).norm();
+        // Segment time is the cruise time the exported feedrate commands. Firmware look-ahead
+        // applies acceleration across consecutive segments; timing each short segment as a
+        // stop-start move would cap printing near 2*sqrt(length/accel) per segment.
         double dt = std::max({cart / p.machine.linearSpeed, angle / p.machine.angularSpeed,
-                              bead / std::max(0.1, b.speed), 2 * std::sqrt(cart / p.machine.linearAccel),
-                              2 * std::sqrt(angle / p.machine.angularAccel), 0.001});
+                              bead / std::max(0.1, b.speed), 0.001});
         double volume = std::max(0.0, b.deltaE) * pi * std::pow(p.machine.filamentDiameter / 2, 2);
         dt = std::max(dt, volume / p.machine.maxFlow);
         dt = std::max(dt, b.dwell);
